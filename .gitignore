@@ -1,0 +1,23 @@
+node_modules/
+dist/
+build/
+
+# Segredos: nunca versionar. Use .env.example como modelo.
+.env
+.env.*
+!.env.example
+
+# Arquivos enviados pelos usuários: fotos de confirmação (dado pessoal/LGPD),
+# notas fiscais e logo da empresa.
+uploads/
+apps/api/uploads/
+
+# Dumps do banco contêm dados reais (CPF, hashes de senha). Nunca versionar.
+backup-*.sql
+*.dump
+
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

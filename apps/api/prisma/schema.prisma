@@ -1,0 +1,759 @@
+// Sistema de Gestão de EPI — schema do banco de dados
+// PostgreSQL + Prisma. Multiempresa via organizationId em toda entidade de negócio.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========================= ENUMS =========================
+
+enum UserRole {
+  ADMIN
+  ALMOXARIFADO
+  SEGURANCA_TRABALHO
+  CONSULTA
+}
+
+enum UserStatus {
+  ATIVO
+  INATIVO
+}
+
+enum EmployeeStatus {
+  ATIVO
+  AFASTADO
+  FERIAS
+  DESLIGADO
+}
+
+enum RecordStatus {
+  ATIVO
+  INATIVO
+}
+
+enum PurchaseStatus {
+  RASCUNHO
+  RECEBIDA
+  CANCELADA
+}
+
+enum MovementType {
+  ENTRADA_COMPRA
+  SAIDA_ENTREGA
+  DEVOLUCAO
+  AJUSTE_POSITIVO
+  AJUSTE_NEGATIVO
+  PERDA
+  DANIFICACAO
+  DESCARTE
+}
+
+enum DeliveryStatus {
+  PENDENTE
+  CONFIRMADA
+  EXPIRADA
+  SUBSTITUIDA
+  CANCELADA
+}
+
+enum DeliveryItemStatus {
+  REGULAR
+  PROXIMO_DA_TROCA
+  CRITICO
+  VENCIDO
+  DEVOLVIDO
+  SUBSTITUIDO
+}
+
+enum DeliveryReason {
+  PRIMEIRA_ENTREGA
+  SUBSTITUICAO
+  TROCA
+  PERDA
+  DANIFICACAO
+  VENCIMENTO
+  ADMISSAO
+  OUTRO
+}
+
+enum ReturnReason {
+  TROCA
+  DESLIGAMENTO
+  VENCIMENTO
+  DANIFICACAO
+  APOSENTADORIA
+  OUTRO
+}
+
+enum ReturnCondition {
+  BOM
+  REGULAR
+  DANIFICADO
+  INUTILIZAVEL
+}
+
+enum AlertType {
+  ESTOQUE_MINIMO
+  ESTOQUE_ZERADO
+  CA_PROXIMO_VENCIMENTO
+  CA_VENCIDO
+  EPI_PROXIMO_TROCA
+  EPI_VENCIDO
+  ENTREGA_PENDENTE_CONFIRMACAO
+}
+
+enum AlertPriority {
+  CRITICO
+  ATENCAO
+  INFORMACAO
+}
+
+enum AlertStatus {
+  ABERTO
+  LIDO
+  RESOLVIDO
+}
+
+enum ConfirmationMethod {
+  CONFIRMACAO_ELETRONICA_DIGITACAO
+}
+
+enum AuditAction {
+  LOGIN
+  LOGOUT
+  CRIACAO
+  ALTERACAO
+  INATIVACAO
+  REATIVACAO
+  ENTREGA
+  CONFIRMACAO
+  DEVOLUCAO
+  COMPRA
+  ENTRADA_ESTOQUE
+  SAIDA_ESTOQUE
+  AJUSTE_ESTOQUE
+  ALTERACAO_PERMISSOES
+}
+
+// ========================= ORGANIZAÇÃO =========================
+
+model Organization {
+  id          String   @id @default(cuid())
+  razaoSocial String
+  nomeFantasia String?
+  cnpj        String   @unique
+  telefone    String?
+  email       String?
+  endereco    String?
+  logoUrl     String?
+
+  // Configuração de alertas (dias de antecedência)
+  alertDaysCritico  Int @default(7)
+  alertDaysAtencao  Int @default(15)
+  alertDaysProximo  Int @default(30)
+
+  // Exige foto (captura por câmera) na confirmação eletrônica de recebimento
+  exigirFotoConfirmacao Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users                    User[]
+  branches                 Branch[]
+  branchStocks             BranchStock[]
+  departments              Department[]
+  positions                Position[]
+  employees                Employee[]
+  ppeCategories            PpeCategory[]
+  ppeItems                 PpeItem[]
+  ppeKits                  PpeKit[]
+  positionPpeRequirements  PositionPpeRequirement[]
+  suppliers                Supplier[]
+  purchases                Purchase[]
+  documents                Document[]
+  stockMovements           StockMovement[]
+  deliveries               Delivery[]
+  electronicConfirmations  ElectronicConfirmation[]
+  ppeReturns               PpeReturn[]
+  alerts                   Alert[]
+  notifications            Notification[]
+  auditLogs                AuditLog[]
+
+  @@map("organizations")
+}
+
+// ========================= FILIAIS =========================
+
+model Branch {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  nome           String
+  codigo         String?
+  cnpj           String?
+  uf             String?
+  cidade         String?
+  endereco       String?
+  responsavel    String?
+  status         RecordStatus @default(ATIVO)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users          User[]
+  employees      Employee[]
+  stocks         BranchStock[]
+  stockMovements StockMovement[]
+  purchases      Purchase[]
+  deliveries     Delivery[]
+  alerts         Alert[]
+
+  @@unique([organizationId, nome])
+  @@index([organizationId, status])
+  @@map("branches")
+}
+
+// Estoque é mantido por filial: cada unidade tem seu próprio almoxarifado.
+model BranchStock {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  branchId       String
+  branch         Branch       @relation(fields: [branchId], references: [id])
+  ppeItemId      String
+  ppeItem        PpeItem      @relation(fields: [ppeItemId], references: [id])
+  estoqueAtual   Int          @default(0)
+  estoqueMinimo  Int          @default(0)
+  estoqueMaximo  Int          @default(0)
+  // Custo da última compra desta filial. Cada unidade compra pelo seu próprio preço,
+  // então o custo não pode ser global — senão uma compra no Pará distorce o custo do Amazonas.
+  custoUnitario  Decimal      @default(0) @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([branchId, ppeItemId])
+  @@index([organizationId, branchId])
+  @@map("branch_stocks")
+}
+
+// ========================= USUÁRIOS / AUTH =========================
+
+model User {
+  id             String     @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  // Filial do usuário. Nulo = acesso a todas as filiais (perfil matriz / administrador).
+  branchId       String?
+  branch         Branch?    @relation(fields: [branchId], references: [id])
+  name           String
+  email          String     @unique
+  passwordHash   String
+  role           UserRole
+  status         UserStatus @default(ATIVO)
+  lastLoginAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  notifications       Notification[]
+  auditLogs            AuditLog[]
+  purchasesCreated     Purchase[]        @relation("PurchaseCreatedBy")
+  deliveriesCreated    Delivery[]        @relation("DeliveryCreatedBy")
+  deliveriesCanceled   Delivery[]        @relation("DeliveryCanceledBy")
+  stockMovements       StockMovement[]
+  ppeReturns           PpeReturn[]
+  documentsUploaded    Document[]
+  confirmationsHandled ElectronicConfirmation[]
+
+  @@index([organizationId])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  tokenHash String   @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+// ========================= GESTÃO =========================
+
+model Department {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  nome           String
+  descricao      String?
+  responsavel    String?
+  status         RecordStatus @default(ATIVO)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employees Employee[]
+
+  @@unique([organizationId, nome])
+  @@map("departments")
+}
+
+model Position {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  nome           String
+  descricao      String?
+  status         RecordStatus @default(ATIVO)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employees    Employee[]
+  requirements PositionPpeRequirement[]
+
+  @@unique([organizationId, nome])
+  @@map("positions")
+}
+
+model Employee {
+  id              String         @id @default(cuid())
+  organizationId  String
+  organization    Organization   @relation(fields: [organizationId], references: [id])
+  branchId        String?
+  branch          Branch?        @relation(fields: [branchId], references: [id])
+  nomeCompleto    String
+  cpf             String
+  matricula       String
+  positionId      String?
+  position        Position?      @relation(fields: [positionId], references: [id])
+  departmentId    String?
+  department      Department?    @relation(fields: [departmentId], references: [id])
+  dataAdmissao    DateTime
+  dataDesligamento DateTime?
+  email           String?
+  telefone        String?
+  status          EmployeeStatus @default(ATIVO)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  deliveries              Delivery[]
+  ppeReturns              PpeReturn[]
+  electronicConfirmations ElectronicConfirmation[]
+
+  @@unique([organizationId, cpf])
+  @@unique([organizationId, matricula])
+  @@index([organizationId, status])
+  @@index([organizationId, branchId])
+  @@map("employees")
+}
+
+// ========================= EPI =========================
+
+model PpeCategory {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  nome           String
+  descricao      String?
+  status         RecordStatus @default(ATIVO)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items PpeItem[]
+
+  @@unique([organizationId, nome])
+  @@map("ppe_categories")
+}
+
+model PpeItem {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  nome           String
+  codigoInterno  String
+  ca             String
+  caValidade     DateTime
+  categoryId     String
+  category       PpeCategory  @relation(fields: [categoryId], references: [id])
+  fabricante     String?
+  modelo         String?
+  unidade        String       @default("UN")
+  vidaUtilDias   Int
+  // Valores padrão sugeridos ao criar o estoque deste EPI em uma nova filial.
+  // Os valores reais (saldo, mínimo, máximo e custo) vivem em BranchStock, por filial.
+  estoqueMinimo  Int          @default(0)
+  estoqueMaximo  Int          @default(0)
+  custoUnitario  Decimal      @default(0) @db.Decimal(12, 2)
+  descricao      String?
+  status         RecordStatus @default(ATIVO)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branchStocks     BranchStock[]
+  kitItems         PpeKitItem[]
+  requirements     PositionPpeRequirement[]
+  purchaseItems    PurchaseItem[]
+  stockMovements   StockMovement[]
+  deliveryItems    DeliveryItem[]
+  ppeReturns       PpeReturn[]
+
+  @@unique([organizationId, codigoInterno])
+  @@index([organizationId, status])
+  @@map("ppe_items")
+}
+
+model PpeKit {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  nome           String
+  descricao      String?
+  status         RecordStatus @default(ATIVO)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items PpeKitItem[]
+
+  @@unique([organizationId, nome])
+  @@map("ppe_kits")
+}
+
+model PpeKitItem {
+  id         String  @id @default(cuid())
+  kitId      String
+  kit        PpeKit  @relation(fields: [kitId], references: [id], onDelete: Cascade)
+  ppeItemId  String
+  ppeItem    PpeItem @relation(fields: [ppeItemId], references: [id])
+  quantidade Int     @default(1)
+
+  @@unique([kitId, ppeItemId])
+  @@map("ppe_kit_items")
+}
+
+model PositionPpeRequirement {
+  id                    String   @id @default(cuid())
+  organizationId        String
+  organization          Organization @relation(fields: [organizationId], references: [id])
+  positionId            String
+  position              Position @relation(fields: [positionId], references: [id])
+  ppeItemId             String
+  ppeItem               PpeItem  @relation(fields: [ppeItemId], references: [id])
+  quantidade            Int      @default(1)
+  vidaUtilDiasOverride  Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([positionId, ppeItemId])
+  @@map("position_ppe_requirements")
+}
+
+// ========================= FORNECEDORES / COMPRAS =========================
+
+model Supplier {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  razaoSocial    String
+  nomeFantasia   String?
+  cnpj           String
+  telefone       String?
+  email          String?
+  endereco       String?
+  observacoes    String?
+  status         RecordStatus @default(ATIVO)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  purchases Purchase[]
+
+  @@unique([organizationId, cnpj])
+  @@map("suppliers")
+}
+
+model Purchase {
+  id             String         @id @default(cuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  // Filial que recebe a mercadoria — a entrada de estoque acontece nela.
+  branchId       String
+  branch         Branch         @relation(fields: [branchId], references: [id])
+  numeroNf       String
+  supplierId     String
+  supplier       Supplier       @relation(fields: [supplierId], references: [id])
+  dataCompra     DateTime
+  valorTotal     Decimal        @default(0) @db.Decimal(12, 2)
+  observacoes    String?
+  status         PurchaseStatus @default(RASCUNHO)
+  processedAt    DateTime?
+  createdById    String
+  createdBy      User           @relation("PurchaseCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items     PurchaseItem[]
+  documents Document[]
+
+  @@unique([organizationId, numeroNf, supplierId])
+  @@index([organizationId, status])
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id             String   @id @default(cuid())
+  purchaseId     String
+  purchase       Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  ppeItemId      String
+  ppeItem        PpeItem  @relation(fields: [ppeItemId], references: [id])
+  quantidade     Int
+  valorUnitario  Decimal  @db.Decimal(12, 2)
+  valorTotal     Decimal  @db.Decimal(12, 2)
+
+  @@map("purchase_items")
+}
+
+model Document {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  purchaseId     String?
+  purchase       Purchase?    @relation(fields: [purchaseId], references: [id])
+  fileName       String
+  mimeType       String
+  sizeBytes      Int
+  storagePath    String
+  uploadedById   String
+  uploadedBy     User         @relation(fields: [uploadedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([organizationId, purchaseId])
+  @@map("documents")
+}
+
+// ========================= ESTOQUE =========================
+
+model StockMovement {
+  id               String       @id @default(cuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id])
+  branchId         String
+  branch           Branch       @relation(fields: [branchId], references: [id])
+  ppeItemId        String
+  ppeItem          PpeItem      @relation(fields: [ppeItemId], references: [id])
+  tipo             MovementType
+  quantidade       Int
+  estoqueAnterior  Int
+  estoquePosterior Int
+  motivo           String?
+  referencia       String?
+  userId           String
+  user             User         @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([organizationId, ppeItemId, createdAt])
+  @@index([organizationId, branchId, createdAt])
+  @@map("stock_movements")
+}
+
+// ========================= ENTREGAS =========================
+
+model Delivery {
+  id             String         @id @default(cuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  // Filial da entrega (registrada no momento, para preservar o histórico mesmo se o colaborador mudar de filial).
+  branchId       String?
+  branch         Branch?        @relation(fields: [branchId], references: [id])
+  employeeId     String
+  employee       Employee       @relation(fields: [employeeId], references: [id])
+  status         DeliveryStatus @default(PENDENTE)
+  motivo         DeliveryReason
+  observacoes    String?
+  createdById    String
+  createdBy      User           @relation("DeliveryCreatedBy", fields: [createdById], references: [id])
+
+  // Estorno: cancelar uma entrega já confirmada exige justificativa registrada.
+  // A confirmação eletrônica original é preservada como evidência.
+  cancelamentoMotivo String?
+  canceladoEm        DateTime?
+  canceladoPorId     String?
+  canceladoPor       User?     @relation("DeliveryCanceledBy", fields: [canceladoPorId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items        DeliveryItem[]
+  confirmation ElectronicConfirmation?
+
+  @@index([organizationId, status])
+  @@index([organizationId, employeeId])
+  @@map("deliveries")
+}
+
+model DeliveryItem {
+  id                    String              @id @default(cuid())
+  deliveryId            String
+  delivery              Delivery            @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  ppeItemId             String
+  ppeItem               PpeItem             @relation(fields: [ppeItemId], references: [id])
+  caSnapshot            String
+  quantidade            Int
+  custoUnitarioSnapshot Decimal             @db.Decimal(12, 2)
+  dataEntrega           DateTime
+  dataPrevistaTroca     DateTime
+  status                DeliveryItemStatus  @default(REGULAR)
+
+  ppeReturns PpeReturn[]
+
+  @@index([ppeItemId, status])
+  @@map("delivery_items")
+}
+
+model ElectronicConfirmation {
+  id                     String             @id @default(cuid())
+  organizationId         String
+  organization           Organization       @relation(fields: [organizationId], references: [id])
+  deliveryId             String             @unique
+  delivery               Delivery           @relation(fields: [deliveryId], references: [id])
+  employeeId             String
+  employee               Employee           @relation(fields: [employeeId], references: [id])
+  nomeDigitado           String
+  nomeCadastradoSnapshot String
+  method                 ConfirmationMethod @default(CONFIRMACAO_ELETRONICA_DIGITACAO)
+  // Foto capturada pela câmera no momento do recebimento (comprovação visual).
+  // Arquivo fica fora da web root e só é servido por rota autenticada da própria organização.
+  photoPath              String?
+  photoMimeType          String?
+  handledById            String
+  handledBy              User               @relation(fields: [handledById], references: [id])
+  confirmedAt            DateTime           @default(now())
+
+  createdAt DateTime @default(now())
+
+  @@map("electronic_confirmations")
+}
+
+// ========================= DEVOLUÇÕES =========================
+
+model PpeReturn {
+  id              String          @id @default(cuid())
+  organizationId  String
+  organization    Organization    @relation(fields: [organizationId], references: [id])
+  employeeId      String
+  employee        Employee        @relation(fields: [employeeId], references: [id])
+  ppeItemId       String
+  ppeItem         PpeItem         @relation(fields: [ppeItemId], references: [id])
+  deliveryItemId  String?
+  deliveryItem    DeliveryItem?   @relation(fields: [deliveryItemId], references: [id])
+  quantidade      Int
+  dataDevolucao   DateTime
+  motivo          ReturnReason
+  estado          ReturnCondition
+  retornouEstoque Boolean         @default(false)
+  observacoes     String?
+  userId          String
+  user            User            @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([organizationId, employeeId])
+  @@map("ppe_returns")
+}
+
+// ========================= ALERTAS / NOTIFICAÇÕES =========================
+
+model Alert {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  // Filial à qual o alerta se refere (estoque é por filial). Nulo = alerta da empresa toda.
+  branchId       String?
+  branch         Branch?       @relation(fields: [branchId], references: [id])
+  tipo           AlertType
+  prioridade     AlertPriority
+  status         AlertStatus   @default(ABERTO)
+  titulo         String
+  mensagem       String
+  referenceType  String?
+  referenceId    String?
+  resolvedAt     DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([organizationId, status, prioridade])
+  @@index([organizationId, tipo, referenceType, referenceId])
+  @@index([organizationId, branchId])
+  @@map("alerts")
+}
+
+model Notification {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  userId         String
+  user           User         @relation(fields: [userId], references: [id])
+  title          String
+  message        String
+  link           String?
+  read           Boolean      @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([organizationId, userId, read])
+  @@map("notifications")
+}
+
+// ========================= AUDITORIA =========================
+
+model AuditLog {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  userId         String?
+  user           User?        @relation(fields: [userId], references: [id])
+  action         AuditAction
+  entityType     String
+  entityId       String?
+  oldData        Json?
+  newData        Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([organizationId, entityType, entityId])
+  @@index([organizationId, createdAt])
+  @@map("audit_logs")
+}

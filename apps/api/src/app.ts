@@ -1,0 +1,67 @@
+import express from "express";
+import helmet from "helmet";
+import cors from "cors";
+import cookieParser from "cookie-parser";
+import { env } from "./env";
+import { authRouter } from "./routes/auth.routes";
+import { branchesRouter } from "./routes/branches.routes";
+import { positionsRouter } from "./routes/positions.routes";
+import { departmentsRouter } from "./routes/departments.routes";
+import { employeesRouter } from "./routes/employees.routes";
+import { ppeCategoriesRouter } from "./routes/ppeCategories.routes";
+import { ppeItemsRouter } from "./routes/ppeItems.routes";
+import { ppeKitsRouter } from "./routes/ppeKits.routes";
+import { positionRequirementsRouter } from "./routes/positionRequirements.routes";
+import { suppliersRouter } from "./routes/suppliers.routes";
+import { purchasesRouter } from "./routes/purchases.routes";
+import { stockRouter } from "./routes/stockMovements.routes";
+import { deliveriesRouter } from "./routes/deliveries.routes";
+import { ppeReturnsRouter } from "./routes/ppeReturns.routes";
+import { alertsRouter } from "./routes/alerts.routes";
+import { notificationsRouter } from "./routes/notifications.routes";
+import { dashboardRouter } from "./routes/dashboard.routes";
+import { usersRouter } from "./routes/users.routes";
+import { organizationRouter } from "./routes/organization.routes";
+import { auditLogsRouter } from "./routes/auditLogs.routes";
+import { searchRouter } from "./routes/search.routes";
+import { documentsRouter } from "./routes/documents.routes";
+import { reportsRouter } from "./routes/reports.routes";
+import { importsRouter } from "./routes/imports.routes";
+import { notFoundHandler, errorHandler } from "./middleware/errorHandler";
+
+export const app = express();
+
+app.use(helmet());
+app.use(cors({ origin: env.corsOrigin, credentials: true }));
+app.use(cookieParser());
+app.use(express.json({ limit: "2mb" }));
+
+app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
+
+app.use("/api/auth", authRouter);
+app.use("/api/branches", branchesRouter);
+app.use("/api/positions", positionsRouter);
+app.use("/api/departments", departmentsRouter);
+app.use("/api/employees", employeesRouter);
+app.use("/api/ppe-categories", ppeCategoriesRouter);
+app.use("/api/ppe-items", ppeItemsRouter);
+app.use("/api/ppe-kits", ppeKitsRouter);
+app.use("/api/position-requirements", positionRequirementsRouter);
+app.use("/api/suppliers", suppliersRouter);
+app.use("/api/purchases", purchasesRouter);
+app.use("/api/stock", stockRouter);
+app.use("/api/deliveries", deliveriesRouter);
+app.use("/api/returns", ppeReturnsRouter);
+app.use("/api/alerts", alertsRouter);
+app.use("/api/notifications", notificationsRouter);
+app.use("/api/dashboard", dashboardRouter);
+app.use("/api/users", usersRouter);
+app.use("/api/organization", organizationRouter);
+app.use("/api/audit-logs", auditLogsRouter);
+app.use("/api/search", searchRouter);
+app.use("/api/documents", documentsRouter);
+app.use("/api/reports", reportsRouter);
+app.use("/api/imports", importsRouter);
+
+app.use(notFoundHandler);
+app.use(errorHandler);
