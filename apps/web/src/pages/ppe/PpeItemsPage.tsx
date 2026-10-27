@@ -22,6 +22,7 @@ import { useBranches } from "../../hooks/useBranches";
 type FormData = {
   nome: string;
   codigoInterno: string;
+  exigeCa: boolean;
   ca: string;
   caValidade: string;
   categoryId: string;
@@ -58,11 +59,15 @@ export default function PpeItemsPage() {
   });
   const { data: branches } = useBranches();
 
-  const { register, handleSubmit, reset, formState } = useForm<FormData>();
+  const { register, handleSubmit, reset, formState, watch } = useForm<FormData>();
+  // Uniforme (camisa, calça) não tem Certificado de Aprovação: os campos de CA somem.
+  const exigeCa = watch("exigeCa");
 
   const saveMutation = useMutation({
-    mutationFn: async (values: FormData) =>
-      editing ? api.put(`/ppe-items/${editing.id}`, values) : api.post("/ppe-items", values),
+    mutationFn: async (values: FormData) => {
+      const payload = values.exigeCa ? values : { ...values, ca: null, caValidade: null };
+      return editing ? api.put(`/ppe-items/${editing.id}`, payload) : api.post("/ppe-items", payload);
+    },
     onSuccess: () => {
       toast.success(editing ? "EPI atualizado com sucesso." : "EPI criado com sucesso.");
       queryClient.invalidateQueries({ queryKey: ["ppe-items"] });
@@ -87,6 +92,7 @@ export default function PpeItemsPage() {
     reset({
       nome: "",
       codigoInterno: "",
+      exigeCa: true,
       ca: "",
       caValidade: "",
       categoryId: "",
@@ -107,8 +113,9 @@ export default function PpeItemsPage() {
     reset({
       nome: item.nome,
       codigoInterno: item.codigoInterno,
-      ca: item.ca,
-      caValidade: item.caValidade.slice(0, 10),
+      exigeCa: item.exigeCa,
+      ca: item.ca ?? "",
+      caValidade: item.caValidade ? item.caValidade.slice(0, 10) : "",
       categoryId: item.categoryId,
       fabricante: item.fabricante ?? "",
       modelo: item.modelo ?? "",
@@ -155,7 +162,22 @@ export default function PpeItemsPage() {
             { header: "Nome", cell: (i) => <span className="font-medium text-slate-700">{i.nome}</span> },
             { header: "Código", cell: (i) => i.codigoInterno },
             { header: "Categoria", cell: (i) => i.category?.nome ?? "-" },
-            { header: "CA", cell: (i) => <div className="flex items-center gap-2">{i.ca} {i.caStatus && <Badge tone={i.caStatus === "VENCIDO" ? "danger" : i.caStatus === "PROXIMO_VENCIMENTO" ? "warning" : "success"}>{i.caStatus === "VENCIDO" ? "Vencido" : i.caStatus === "PROXIMO_VENCIMENTO" ? "Próx. vencimento" : "Válido"}</Badge>}</div> },
+            {
+              header: "CA",
+              cell: (i) =>
+                !i.exigeCa ? (
+                  <span className="text-xs text-slate-400">Sem CA (uniforme)</span>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    {i.ca}{" "}
+                    {i.caStatus && (
+                      <Badge tone={i.caStatus === "VENCIDO" ? "danger" : i.caStatus === "PROXIMO_VENCIMENTO" ? "warning" : "success"}>
+                        {i.caStatus === "VENCIDO" ? "Vencido" : i.caStatus === "PROXIMO_VENCIMENTO" ? "Próx. vencimento" : "Válido"}
+                      </Badge>
+                    )}
+                  </div>
+                ),
+            },
             {
               header: "Estoque total",
               cell: (i) => (
@@ -170,8 +192,8 @@ export default function PpeItemsPage() {
               cell: (i) =>
                 canEdit && (
                   <div className="flex justify-end gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(i)}><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="sm" onClick={() => setToggling(i)}><Power className="h-4 w-4" /></Button>
+                    <Button title="Editar EPI" variant="ghost" size="sm" onClick={() => openEdit(i)}><Pencil className="h-4 w-4" /></Button>
+                    <Button title="Ativar ou inativar EPI" variant="ghost" size="sm" onClick={() => setToggling(i)}><Power className="h-4 w-4" /></Button>
                   </div>
                 ),
               className: "text-right",
@@ -209,8 +231,24 @@ export default function PpeItemsPage() {
             <option value="">Selecione...</option>
             {categories?.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
           </Select>
-          <Input label="CA" required error={formState.errors.ca?.message} {...register("ca", { required: "Obrigatório." })} />
-          <Input label="Validade do CA" type="date" required error={formState.errors.caValidade?.message} {...register("caValidade", { required: "Obrigatório." })} />
+          <div className="sm:col-span-2">
+            <label className="flex items-start gap-2 text-sm text-slate-700">
+              <input type="checkbox" className="mt-0.5 h-4 w-4" {...register("exigeCa")} />
+              <span>
+                <strong>Este item tem Certificado de Aprovação (CA)</strong>
+                <span className="mt-0.5 block text-xs text-slate-500">
+                  Desmarque para uniformes e vestuário sem CA — camisa, calça, jaqueta. O item continua tendo estoque
+                  por filial, matriz por cargo, entrega com confirmação e termo; só não é controlado por validade de CA.
+                </span>
+              </span>
+            </label>
+          </div>
+          {exigeCa && (
+            <>
+              <Input label="CA" required error={formState.errors.ca?.message} {...register("ca", { required: "Obrigatório." })} />
+              <Input label="Validade do CA" type="date" required error={formState.errors.caValidade?.message} {...register("caValidade", { required: "Obrigatório." })} />
+            </>
+          )}
           <Input label="Fabricante" {...register("fabricante")} />
           <Input label="Modelo" {...register("modelo")} />
           <Input label="Unidade" required {...register("unidade", { required: true })} />
@@ -259,7 +297,7 @@ export default function PpeItemsPage() {
         onClose={() => setImportOpen(false)}
         type="ppeItems"
         invalidateKey="ppe-items"
-        columnsHint="nome, codigoInterno, ca, caValidade, categoria, fabricante, modelo, unidade, vidaUtilDias, estoqueMinimo, estoqueMaximo, custoUnitario"
+        columnsHint="nome, codigoInterno, ca, caValidade, categoria, fabricante, modelo, unidade, vidaUtilDias, estoqueMinimo, estoqueMaximo, custoUnitario — deixe ca e caValidade em branco para uniformes sem CA (camisa, calça)"
       />
     </div>
   );

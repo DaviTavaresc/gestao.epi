@@ -91,7 +91,7 @@ export function GlobalSearch() {
                   }}
                 >
                   <span className="font-medium text-slate-700">{p.nome}</span>
-                  <span className="ml-2 text-xs text-slate-400">CA {p.ca}</span>
+                  {p.ca && <span className="ml-2 text-xs text-slate-400">CA {p.ca}</span>}
                 </button>
               ))}
             </div>

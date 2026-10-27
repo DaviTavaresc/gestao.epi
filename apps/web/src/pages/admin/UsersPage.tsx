@@ -102,9 +102,9 @@ export default function UsersPage() {
               header: "",
               cell: (u) => (
                 <div className="flex justify-end gap-1">
-                  <Button variant="ghost" size="sm" onClick={() => { editForm.reset({ name: u.name, role: u.role, branchId: u.branchId ?? "" }); setEditing(u); }}><Pencil className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="sm" onClick={() => setResettingPw(u)}><KeyRound className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="sm" onClick={() => setToggling(u)}><Power className="h-4 w-4" /></Button>
+                  <Button title="Editar usuário" variant="ghost" size="sm" onClick={() => { editForm.reset({ name: u.name, role: u.role, branchId: u.branchId ?? "" }); setEditing(u); }}><Pencil className="h-4 w-4" /></Button>
+                  <Button title="Redefinir senha" variant="ghost" size="sm" onClick={() => setResettingPw(u)}><KeyRound className="h-4 w-4" /></Button>
+                  <Button title="Ativar ou inativar usuário" variant="ghost" size="sm" onClick={() => setToggling(u)}><Power className="h-4 w-4" /></Button>
                 </div>
               ),
               className: "text-right",

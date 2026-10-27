@@ -30,11 +30,16 @@ export function effectiveItemStatus(
   return computeLifecycleStatus(dataPrevistaTroca, now, thresholds);
 }
 
+export type CaStatus = "VALIDO" | "PROXIMO_VENCIMENTO" | "VENCIDO" | "NAO_APLICAVEL";
+
+// Itens sem Certificado de Aprovação (uniforme, camisa) retornam NAO_APLICAVEL:
+// não vencem, não bloqueiam entrega e ficam fora dos alertas e do painel de CA.
 export function computeCaStatus(
-  caValidade: Date,
+  caValidade: Date | null | undefined,
   now: Date,
   thresholds: { proximo: number; atencao: number; critico: number }
-): "VALIDO" | "PROXIMO_VENCIMENTO" | "VENCIDO" {
+): CaStatus {
+  if (!caValidade) return "NAO_APLICAVEL";
   const msPerDay = 1000 * 60 * 60 * 24;
   const diffDays = Math.ceil((caValidade.getTime() - now.getTime()) / msPerDay);
   if (diffDays < 0) return "VENCIDO";

@@ -90,8 +90,13 @@ async function validatePpeItems(rows: Record<string, string>[], organizationId: 
       const errors: string[] = [];
       if (!data.nome) errors.push("Campo 'nome' é obrigatório.");
       if (!data.codigoInterno) errors.push("Campo 'codigoInterno' é obrigatório.");
-      if (!data.ca) errors.push("Campo 'ca' é obrigatório.");
-      if (!data.caValidade || !parseDate(data.caValidade)) errors.push("Campo 'caValidade' inválido.");
+      // Planilha sem CA é tratada como uniforme (camisa, calça): o item fica sem
+      // controle de validade de CA. Preencher só um dos dois campos é erro.
+      const temCa = !!data.ca?.trim();
+      const temValidade = !!data.caValidade?.trim();
+      if (temCa && !parseDate(data.caValidade)) errors.push("Campo 'caValidade' inválido.");
+      if (temCa && !temValidade) errors.push("Informe 'caValidade' para itens com CA.");
+      if (!temCa && temValidade) errors.push("Informe 'ca' ou deixe 'caValidade' em branco (item sem CA).");
       if (!data.categoria) errors.push("Campo 'categoria' é obrigatório.");
       if (!data.vidaUtilDias || Number.isNaN(Number(data.vidaUtilDias))) errors.push("Campo 'vidaUtilDias' inválido.");
 
@@ -184,8 +189,9 @@ importsRouter.post("/:type/commit", upload.single("file"), async (req, res, next
               organizationId,
               nome: data.nome,
               codigoInterno: data.codigoInterno,
-              ca: data.ca,
-              caValidade: parseDate(data.caValidade)!,
+              exigeCa: !!data.ca?.trim(),
+              ca: data.ca?.trim() || null,
+              caValidade: data.ca?.trim() ? parseDate(data.caValidade)! : null,
               categoryId: category!.id,
               fabricante: data.fabricante || null,
               modelo: data.modelo || null,

@@ -171,7 +171,7 @@ export default function PurchasesListPage() {
                   </Select>
                   <Input className="w-24" type="number" min={1} placeholder="Qtd" {...register(`items.${index}.quantidade`, { required: true, valueAsNumber: true, min: 1 })} />
                   <Input className="w-32" type="number" step="0.01" min={0} placeholder="Valor unit." {...register(`items.${index}.valorUnitario`, { required: true, valueAsNumber: true, min: 0 })} />
-                  <Button type="button" variant="ghost" size="sm" onClick={() => remove(index)} disabled={fields.length === 1}>
+                  <Button title="Remover este item da compra" type="button" variant="ghost" size="sm" onClick={() => remove(index)} disabled={fields.length === 1}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>

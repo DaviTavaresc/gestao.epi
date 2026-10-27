@@ -108,10 +108,10 @@ export default function DepartmentsPage() {
               cell: (d) =>
                 canEdit && (
                   <div className="flex justify-end gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(d)}>
+                    <Button title="Editar setor" variant="ghost" size="sm" onClick={() => openEdit(d)}>
                       <Pencil className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setToggling(d)}>
+                    <Button title="Ativar ou inativar setor" variant="ghost" size="sm" onClick={() => setToggling(d)}>
                       <Power className="h-4 w-4" />
                     </Button>
                   </div>

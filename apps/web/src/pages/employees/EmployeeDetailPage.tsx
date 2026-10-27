@@ -1,7 +1,8 @@
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Truck, ShieldCheck, Clock3, AlertTriangle, RotateCcw } from "lucide-react";
+import { ArrowLeft, Truck, ShieldCheck, Clock3, AlertTriangle, RotateCcw, FileDown } from "lucide-react";
 import { api, extractErrorMessage } from "../../lib/api";
+import { openPdfFromApi } from "../../lib/download";
 import { Card, CardHeader, CardBody } from "../../components/ui/Card";
 import { StatCard } from "../../components/ui/StatCard";
 import { StatusBadge, Badge } from "../../components/ui/Badge";
@@ -10,7 +11,7 @@ import { Button } from "../../components/ui/Button";
 import { Select } from "../../components/ui/Field";
 import { usePermissions } from "../../hooks/usePermissions";
 import { toast } from "../../stores/toastStore";
-import { Employee, PpeItem, PositionRequirement, Delivery, PpeReturn } from "../../types";
+import { Employee, PpeItem, PositionRequirement, Delivery, PpeReturn, EmployeeCharge, Page } from "../../types";
 
 type CurrentPpeItem = {
   deliveryId: string;
@@ -41,6 +42,12 @@ export default function EmployeeDetailPage() {
   const { data, isLoading, error } = useQuery<DetailResponse>({
     queryKey: ["employee", id],
     queryFn: async () => (await api.get(`/employees/${id}`)).data,
+  });
+
+  const { data: cobrancas } = useQuery<Page<EmployeeCharge>>({
+    queryKey: ["charges", "employee", id],
+    queryFn: async () => (await api.get("/charges", { params: { employeeId: id, pageSize: 50 } })).data,
+    enabled: !!id,
   });
 
   const statusMutation = useMutation({
@@ -161,6 +168,44 @@ export default function EmployeeDetailPage() {
           )}
         </CardBody>
       </Card>
+
+      {!!cobrancas?.items.length && (
+        <Card>
+          <CardHeader
+            title="Cobranças"
+            subtitle="Valores a descontar por EPI danificado, perdido ou não devolvido"
+          />
+          <CardBody className="p-0">
+            <ul className="divide-y divide-slate-100">
+              {cobrancas.items.map((c) => (
+                <li key={c.id} className="flex flex-wrap items-center gap-3 px-5 py-3 text-sm">
+                  <div className="flex-1">
+                    <p className="font-medium text-slate-700">{c.ppeItem.nome}</p>
+                    <p className="text-xs text-slate-400">
+                      {new Date(c.createdAt).toLocaleDateString("pt-BR")} · {c.motivo} · {c.quantidade}x{" "}
+                      {Number(c.valorUnitario).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                      {c.competencia && ` · Competência ${c.competencia}`}
+                    </p>
+                  </div>
+                  <span className="font-semibold text-slate-800">
+                    {Number(c.valorTotal).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                  </span>
+                  <Badge tone={c.status === "DESCONTADO" ? "success" : c.status === "PENDENTE" ? "warning" : "neutral"}>
+                    {c.status}
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => openPdfFromApi(`/charges/${c.id}/termo.pdf`, `termo-cobranca-${c.id}.pdf`)}
+                  >
+                    <FileDown className="h-3.5 w-3.5" /> Termo
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </CardBody>
+        </Card>
+      )}
 
       <Card>
         <CardHeader title="Histórico" subtitle="Linha do tempo de entregas, confirmações e devoluções" />

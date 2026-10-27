@@ -127,7 +127,7 @@ export default function PositionMatrixPage() {
                       </p>
                     </div>
                     {canEdit && (
-                      <Button variant="ghost" size="sm" onClick={() => setRemoving(req)}>
+                      <Button title="Remover este EPI do cargo" variant="ghost" size="sm" onClick={() => setRemoving(req)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     )}

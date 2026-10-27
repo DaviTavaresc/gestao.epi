@@ -24,6 +24,9 @@ type FormData = {
   motivo: string;
   estado: string;
   observacoes?: string;
+  gerarCobranca: boolean;
+  valorUnitarioCobranca?: string;
+  competenciaCobranca?: string;
 };
 
 export default function ReturnsPage() {
@@ -46,21 +49,45 @@ export default function ReturnsPage() {
     queryFn: async () => (await api.get("/ppe-items", { params: { pageSize: 200 } })).data,
   });
 
-  const { register, handleSubmit, reset, formState } = useForm<FormData>();
+  const { register, handleSubmit, reset, formState, watch } = useForm<FormData>();
+  const estadoSelecionado = watch("estado");
+  // EPI danificado ou inutilizável não volta ao estoque: o prejuízo é cobrado do colaborador.
+  const geraCobranca = estadoSelecionado === "DANIFICADO" || estadoSelecionado === "INUTILIZAVEL";
 
   const saveMutation = useMutation({
-    mutationFn: async (values: FormData) => api.post("/returns", values),
+    mutationFn: async (values: FormData) => {
+      const cobravel = values.estado === "DANIFICADO" || values.estado === "INUTILIZAVEL";
+      return api.post("/returns", {
+        ...values,
+        gerarCobranca: cobravel ? values.gerarCobranca : false,
+        valorUnitarioCobranca:
+          cobravel && values.gerarCobranca && values.valorUnitarioCobranca ? Number(values.valorUnitarioCobranca) : undefined,
+        competenciaCobranca: cobravel && values.gerarCobranca ? values.competenciaCobranca || undefined : undefined,
+      });
+    },
     onSuccess: () => {
       toast.success("Devolução registrada com sucesso.");
       queryClient.invalidateQueries({ queryKey: ["returns"] });
       queryClient.invalidateQueries({ queryKey: ["stock-current"] });
+      queryClient.invalidateQueries({ queryKey: ["charges"] });
       setModalOpen(false);
     },
     onError: (err) => toast.error(extractErrorMessage(err)),
   });
 
   function openCreate() {
-    reset({ employeeId: "", ppeItemId: "", quantidade: 1, dataDevolucao: new Date().toISOString().slice(0, 10), motivo: "TROCA", estado: "BOM", observacoes: "" });
+    reset({
+      employeeId: "",
+      ppeItemId: "",
+      quantidade: 1,
+      dataDevolucao: new Date().toISOString().slice(0, 10),
+      motivo: "TROCA",
+      estado: "BOM",
+      observacoes: "",
+      gerarCobranca: true,
+      valorUnitarioCobranca: "",
+      competenciaCobranca: new Date().toISOString().slice(0, 7),
+    });
     setModalOpen(true);
   }
 
@@ -141,6 +168,33 @@ export default function ReturnsPage() {
             <option value="INUTILIZAVEL">Inutilizável</option>
           </Select>
           <div className="sm:col-span-2"><Textarea label="Observações" {...register("observacoes")} /></div>
+
+          {geraCobranca && (
+            <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-4 sm:col-span-2">
+              <label className="flex items-start gap-2 text-sm text-slate-700">
+                <input type="checkbox" className="mt-0.5 h-4 w-4" {...register("gerarCobranca")} />
+                <span>
+                  <strong>Cobrar o valor do colaborador</strong>
+                  <span className="mt-0.5 block text-xs text-slate-500">
+                    Este EPI não volta ao estoque. Marcado, o sistema lança uma cobrança para desconto em folha usando o
+                    custo da nota fiscal da filial. Desmarque se o dano não foi de responsabilidade do colaborador
+                    (desgaste natural, defeito de fábrica).
+                  </span>
+                </span>
+              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Input
+                  label="Valor unitário (R$)"
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  hint="Em branco, usa o custo da nota fiscal."
+                  {...register("valorUnitarioCobranca")}
+                />
+                <Input label="Competência do desconto" type="month" {...register("competenciaCobranca")} />
+              </div>
+            </div>
+          )}
         </form>
       </Modal>
     </div>

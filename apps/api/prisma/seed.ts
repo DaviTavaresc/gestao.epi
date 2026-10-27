@@ -96,6 +96,7 @@ async function main() {
       "Proteção dos pés",
       "Proteção do corpo",
       "Proteção contra quedas",
+      "Uniformes",
       "Outros",
     ].map((nome) => prisma.ppeCategory.create({ data: { organizationId: organization.id, nome } }))
   );
@@ -169,6 +170,46 @@ async function main() {
     },
   });
 
+  // Camisas do uniforme entram como item de EPI sem Certificado de Aprovação:
+  // aproveitam estoque por filial, entrega com confirmação, termo e cobrança,
+  // sem controle de validade de CA. Um item por tamanho, já que o tamanho varia
+  // de colaborador para colaborador.
+  const camisas: { item: Awaited<ReturnType<typeof prisma.ppeItem.create>>; tamanho: string }[] = [];
+  const modelosDeCamisa = [
+    { base: "Camisa Manga Curta", prefixo: "CAM-MC", tamanhos: ["P", "M", "G", "GG", "XG"], custo: 45.0 },
+    { base: "Camisa Manga Longa", prefixo: "CAM-ML", tamanhos: ["P", "M", "G", "GG"], custo: 56.0 },
+  ];
+  for (const modelo of modelosDeCamisa) {
+    for (const tamanho of modelo.tamanhos) {
+      const item = await prisma.ppeItem.create({
+        data: {
+          organizationId: organization.id,
+          nome: `${modelo.base} - Tam ${tamanho}`,
+          codigoInterno: `${modelo.prefixo}-${tamanho}`,
+          exigeCa: false,
+          categoryId: catMap["Uniformes"],
+          vidaUtilDias: 180,
+          estoqueMinimo: 5,
+          estoqueMaximo: 60,
+          custoUnitario: modelo.custo,
+          descricao: `Camisa do uniforme, tamanho ${tamanho}. Item sem CA.`,
+        },
+      });
+      camisas.push({ item, tamanho });
+    }
+  }
+
+  await prisma.ppeKit.create({
+    data: {
+      organizationId: organization.id,
+      nome: "Kit Uniforme (camisa manga curta M)",
+      descricao: "Troque o item pelo tamanho do colaborador na preparação da entrega.",
+      items: {
+        create: [{ ppeItemId: camisas.find((c) => c.item.codigoInterno === "CAM-MC-M")!.item.id, quantidade: 2 }],
+      },
+    },
+  });
+
   await prisma.positionPpeRequirement.createMany({
     data: [
       { organizationId: organization.id, positionId: soldador.id, ppeItemId: mascaraSolda.id, quantidade: 1 },
@@ -190,6 +231,13 @@ async function main() {
     { branch: filialAmazonas, item: luvaCouro, atual: 40, min: 15, max: 80 },
     { branch: filialAmazonas, item: botina, atual: 0, min: 6, max: 30 },
   ];
+
+  for (const { item } of camisas) {
+    estoquePorFilial.push(
+      { branch: filialPara, item, atual: 20, min: 5, max: 60 },
+      { branch: filialAmazonas, item, atual: 15, min: 5, max: 60 }
+    );
+  }
 
   for (const linha of estoquePorFilial) {
     await prisma.branchStock.create({

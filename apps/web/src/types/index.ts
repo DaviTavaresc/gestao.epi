@@ -2,7 +2,8 @@ export type RecordStatus = "ATIVO" | "INATIVO";
 export type EmployeeStatus = "ATIVO" | "AFASTADO" | "FERIAS" | "DESLIGADO";
 export type DeliveryStatus = "PENDENTE" | "CONFIRMADA" | "EXPIRADA" | "SUBSTITUIDA" | "CANCELADA";
 export type LifecycleStatus = "REGULAR" | "PROXIMO_DA_TROCA" | "CRITICO" | "VENCIDO" | "NUNCA_ENTREGUE" | "DEVOLVIDO" | "SUBSTITUIDO";
-export type CaStatus = "VALIDO" | "PROXIMO_VENCIMENTO" | "VENCIDO";
+// NAO_APLICAVEL: item sem Certificado de Aprovação (uniforme, camisa).
+export type CaStatus = "VALIDO" | "PROXIMO_VENCIMENTO" | "VENCIDO" | "NAO_APLICAVEL";
 export type StockStatus = "NORMAL" | "ATENCAO" | "CRITICO" | "SEM_ESTOQUE";
 export type AlertPriority = "CRITICO" | "ATENCAO" | "INFORMACAO";
 export type AlertStatus = "ABERTO" | "LIDO" | "RESOLVIDO";
@@ -83,8 +84,10 @@ export type PpeItem = {
   id: string;
   nome: string;
   codigoInterno: string;
-  ca: string;
-  caValidade: string;
+  // Uniformes não têm CA: exigeCa = false deixa ca e caValidade nulos.
+  exigeCa: boolean;
+  ca?: string | null;
+  caValidade?: string | null;
   categoryId: string;
   category?: PpeCategory;
   fabricante?: string | null;
@@ -173,7 +176,7 @@ export type DeliveryItem = {
   id: string;
   ppeItemId: string;
   ppeItem: PpeItem;
-  caSnapshot: string;
+  caSnapshot?: string | null;
   quantidade: number;
   custoUnitarioSnapshot: string | number;
   dataEntrega: string;
@@ -224,6 +227,41 @@ export type PpeReturn = {
   observacoes?: string | null;
   user: { id: string; name: string };
 };
+
+export type ChargeStatus = "PENDENTE" | "DESCONTADO" | "PERDOADO" | "CANCELADO";
+export type ChargeReason = "DANIFICACAO" | "PERDA" | "NAO_DEVOLVIDO" | "MAU_USO" | "OUTRO";
+
+export type EmployeeCharge = {
+  id: string;
+  employeeId: string;
+  employee: {
+    id: string;
+    nomeCompleto: string;
+    matricula: string;
+    cpf: string;
+    branch?: { id: string; nome: string } | null;
+  };
+  ppeItemId: string;
+  ppeItem: { id: string; nome: string; codigoInterno: string; ca: string };
+  branch?: { id: string; nome: string } | null;
+  deliveryItemId?: string | null;
+  ppeReturnId?: string | null;
+  ppeReturn?: { id: string; dataDevolucao: string; estado: string; motivo: string } | null;
+  quantidade: number;
+  valorUnitario: string;
+  valorTotal: string;
+  motivo: ChargeReason;
+  status: ChargeStatus;
+  observacoes?: string | null;
+  competencia?: string | null;
+  descontadoEm?: string | null;
+  perdoadoEm?: string | null;
+  perdoadoMotivo?: string | null;
+  createdBy: { id: string; name: string };
+  createdAt: string;
+};
+
+export type ChargeResumo = { status: ChargeStatus; quantidade: number; valor: string | number };
 
 export type Alert = {
   id: string;

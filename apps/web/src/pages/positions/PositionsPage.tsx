@@ -111,10 +111,10 @@ export default function PositionsPage() {
               cell: (p) =>
                 canEdit && (
                   <div className="flex justify-end gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(p)}>
+                    <Button title="Editar cargo" variant="ghost" size="sm" onClick={() => openEdit(p)}>
                       <Pencil className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setToggling(p)}>
+                    <Button title="Ativar ou inativar cargo" variant="ghost" size="sm" onClick={() => setToggling(p)}>
                       <Power className="h-4 w-4" />
                     </Button>
                   </div>

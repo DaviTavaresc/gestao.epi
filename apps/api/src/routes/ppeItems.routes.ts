@@ -7,17 +7,20 @@ import { badRequest, conflict, notFound } from "../utils/httpError";
 import { parsePagination, toSkipTake, buildPageResult } from "../utils/pagination";
 import { writeAuditLog } from "../utils/audit";
 import { computeCaStatus } from "../utils/ppeStatus";
+import { booleanDoFormulario } from "../utils/zodHelpers";
 import { applyStockMovement } from "../utils/stock";
 import { assertBranchAllowed, resolveBranchFilter } from "../utils/branchScope";
 
 export const ppeItemsRouter = Router();
 ppeItemsRouter.use(requireAuth, requireWriteRole("SEGURANCA_TRABALHO", "ALMOXARIFADO"));
 
-const upsertSchema = z.object({
+const camposDoItem = {
   nome: z.string().min(2),
   codigoInterno: z.string().min(1),
-  ca: z.string().min(1),
-  caValidade: z.coerce.date(),
+  // Uniformes (camisa, calça, jaqueta) não têm Certificado de Aprovação.
+  exigeCa: booleanDoFormulario(true),
+  ca: z.string().optional().nullable(),
+  caValidade: z.coerce.date().optional().nullable(),
   categoryId: z.string().min(1),
   fabricante: z.string().optional().nullable(),
   modelo: z.string().optional().nullable(),
@@ -27,13 +30,35 @@ const upsertSchema = z.object({
   estoqueMaximo: z.coerce.number().int().min(0),
   custoUnitario: z.coerce.number().min(0),
   descricao: z.string().optional().nullable(),
-});
+};
+
+// EPI regulamentado é obrigado a informar CA e validade; item sem CA não guarda
+// nenhum dos dois, para não exibir dado morto na tela e nos termos.
+function comRegrasDeCa<T extends z.ZodRawShape>(schema: z.ZodObject<T>) {
+  return schema
+    .refine((d) => !d.exigeCa || (!!d.ca && d.ca.trim().length > 0), {
+      message: "Informe o número do CA ou marque o item como sem CA (uniforme).",
+      path: ["ca"],
+    })
+    .refine((d) => !d.exigeCa || !!d.caValidade, {
+      message: "Informe a validade do CA ou marque o item como sem CA (uniforme).",
+      path: ["caValidade"],
+    })
+    .transform((d) =>
+      d.exigeCa ? { ...d, ca: d.ca!, caValidade: d.caValidade! } : { ...d, ca: null, caValidade: null }
+    );
+}
+
+const upsertSchema = comRegrasDeCa(z.object(camposDoItem));
 
 // Estoque inicial é sempre lançado em uma filial específica.
-const createSchema = upsertSchema.extend({
-  estoqueInicial: z.coerce.number().int().min(0).default(0),
-  branchId: z.string().min(1).optional(),
-});
+const createSchema = comRegrasDeCa(
+  z.object({
+    ...camposDoItem,
+    estoqueInicial: z.coerce.number().int().min(0).default(0),
+    branchId: z.string().min(1).optional(),
+  })
+);
 
 // Soma o estoque de todas as filiais visíveis ao usuário, para exibir no catálogo.
 async function consolidatedStock(organizationId: string, branchId?: string) {

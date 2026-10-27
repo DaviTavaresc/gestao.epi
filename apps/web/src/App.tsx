@@ -30,6 +30,7 @@ import DeliveriesListPage from "./pages/deliveries/DeliveriesListPage";
 import NewDeliveryPage from "./pages/deliveries/NewDeliveryPage";
 import DeliveryDetailPage from "./pages/deliveries/DeliveryDetailPage";
 import ReturnsPage from "./pages/returns/ReturnsPage";
+import ChargesPage from "./pages/charges/ChargesPage";
 import TrocasPage from "./pages/trocas/TrocasPage";
 import CalendarPage from "./pages/calendar/CalendarPage";
 import AlertsPage from "./pages/alerts/AlertsPage";
@@ -97,6 +98,7 @@ export default function App() {
             <Route path="/entregas/nova" element={<NewDeliveryPage />} />
             <Route path="/entregas/:id" element={<DeliveryDetailPage />} />
             <Route path="/devolucoes" element={<ReturnsPage />} />
+            <Route path="/cobrancas" element={<ChargesPage />} />
             <Route path="/trocas" element={<TrocasPage />} />
 
             <Route path="/compras" element={<PurchasesListPage />} />

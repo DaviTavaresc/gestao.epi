@@ -158,6 +158,7 @@ export default function PurchaseDetailPage() {
                     <FileText className="h-4 w-4 text-slate-400" /> {doc.fileName}
                   </span>
                   <Button
+                    title="Abrir documento"
                     variant="ghost"
                     size="sm"
                     onClick={async () => {

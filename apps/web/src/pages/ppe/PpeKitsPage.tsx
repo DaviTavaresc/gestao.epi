@@ -101,7 +101,7 @@ export default function PpeKitsPage() {
                 {canEdit && (
                   <div className="flex gap-2">
                     <Button variant="outline" size="sm" onClick={() => openEdit(kit)}><Pencil className="h-4 w-4" /> Editar</Button>
-                    <Button variant="ghost" size="sm" onClick={() => setToggling(kit)}><Power className="h-4 w-4" /></Button>
+                    <Button title="Ativar ou inativar kit" variant="ghost" size="sm" onClick={() => setToggling(kit)}><Power className="h-4 w-4" /></Button>
                   </div>
                 )}
               </CardBody>
@@ -137,7 +137,7 @@ export default function PpeKitsPage() {
                     {ppeItems?.items.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
                   </Select>
                   <Input className="w-24" type="number" min={1} {...register(`items.${index}.quantidade`, { required: true, valueAsNumber: true, min: 1 })} />
-                  <Button type="button" variant="ghost" size="sm" onClick={() => remove(index)} disabled={fields.length === 1}>
+                  <Button title="Remover este item do kit" type="button" variant="ghost" size="sm" onClick={() => remove(index)} disabled={fields.length === 1}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>

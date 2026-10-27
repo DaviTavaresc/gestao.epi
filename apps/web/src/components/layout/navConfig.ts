@@ -13,6 +13,7 @@ import {
   Truck,
   RotateCcw,
   Repeat,
+  HandCoins,
   ShoppingCart,
   Factory,
   CalendarDays,
@@ -64,6 +65,7 @@ export const navGroups: NavGroup[] = [
       { label: "Entregas", to: "/entregas", icon: Truck },
       { label: "Devoluções", to: "/devolucoes", icon: RotateCcw },
       { label: "Trocas", to: "/trocas", icon: Repeat },
+      { label: "Cobranças", to: "/cobrancas", icon: HandCoins },
     ],
   },
   {

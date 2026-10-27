@@ -7,7 +7,8 @@ import { requireWriteRole } from "../middleware/rbac";
 import { badRequest, conflict, forbidden, notFound } from "../utils/httpError";
 import { parsePagination, toSkipTake, buildPageResult } from "../utils/pagination";
 import { writeAuditLog } from "../utils/audit";
-import { computeLifecycleStatus, effectiveItemStatus } from "../utils/ppeStatus";
+import { computeLifecycleStatus, effectiveItemStatus, computeCaStatus } from "../utils/ppeStatus";
+import { imagemSeguraParaPdf } from "../utils/imageSafety";
 import { namesMatch } from "../utils/nameMatch";
 import { generateDeliveryTermPdf } from "../utils/pdf";
 import { logosDir, confirmationPhotosDir, uploadConfirmationPhoto } from "../utils/upload";
@@ -109,7 +110,8 @@ deliveriesRouter.get("/prepare/:employeeId", async (req, res, next) => {
       let status: "REGULAR" | "PROXIMO_DA_TROCA" | "CRITICO" | "VENCIDO" | "NUNCA_ENTREGUE" = "NUNCA_ENTREGUE";
       if (current) status = computeLifecycleStatus(current.dataPrevistaTroca, now, thresholds);
 
-      const caStatus = req.ppeItem.caValidade < now ? "VENCIDO" : "VALIDO";
+      // Uniforme sem CA nunca vence, então não entra no bloqueio por CA.
+      const caStatus = computeCaStatus(req.ppeItem.caValidade, now, thresholds);
       const needsDelivery = status !== "REGULAR";
       const estoqueDisponivel = stockByItem.get(req.ppeItemId) ?? 0;
 
@@ -311,12 +313,28 @@ deliveriesRouter.post("/", async (req, res, next) => {
     const stockByItem = new Map(branchStocks.map((s) => [s.ppeItemId, s.estoqueAtual]));
     const custoByItem = new Map(branchStocks.map((s) => [s.ppeItemId, s.custoUnitario]));
 
+    // A matriz Cargo x EPI pode definir vida útil própria para o cargo — ela prevalece
+    // sobre a vida útil padrão do catálogo no cálculo da data de troca.
+    const requisitosDoCargo = employee.positionId
+      ? await prisma.positionPpeRequirement.findMany({
+          where: { positionId: employee.positionId, ppeItemId: { in: ppeItemIds } },
+          select: { ppeItemId: true, vidaUtilDiasOverride: true },
+        })
+      : [];
+    const vidaUtilPorItem = new Map(
+      requisitosDoCargo
+        .filter((r) => r.vidaUtilDiasOverride != null)
+        .map((r) => [r.ppeItemId, r.vidaUtilDiasOverride as number])
+    );
+
     const now = new Date();
     for (const line of data.items) {
       const ppeItem = ppeItems.find((p) => p.id === line.ppeItemId)!;
       const disponivel = stockByItem.get(line.ppeItemId) ?? 0;
       if (ppeItem.status !== "ATIVO") throw badRequest(`O EPI "${ppeItem.nome}" está inativo e não pode ser entregue.`);
-      if (ppeItem.caValidade < now) throw badRequest(`O EPI "${ppeItem.nome}" possui CA VENCIDO e não pode ser entregue.`);
+      if (ppeItem.caValidade && ppeItem.caValidade < now) {
+        throw badRequest(`O EPI "${ppeItem.nome}" possui CA VENCIDO e não pode ser entregue.`);
+      }
       if (disponivel < line.quantidade) {
         throw badRequest(
           `Estoque insuficiente para "${ppeItem.nome}" na filial ${employee.branch?.nome ?? ""}. Disponível: ${disponivel}, solicitado: ${line.quantidade}.`
@@ -349,7 +367,9 @@ deliveriesRouter.post("/", async (req, res, next) => {
             // Custo da filial que está entregando (cai para o catálogo se ela ainda não comprou).
             custoUnitarioSnapshot: custoByItem.get(ppeItem.id) ?? ppeItem.custoUnitario,
             dataEntrega: now,
-            dataPrevistaTroca: new Date(now.getTime() + ppeItem.vidaUtilDias * 24 * 60 * 60 * 1000),
+            dataPrevistaTroca: new Date(
+              now.getTime() + (vidaUtilPorItem.get(ppeItem.id) ?? ppeItem.vidaUtilDias) * 24 * 60 * 60 * 1000
+            ),
             status: "REGULAR",
           },
         });
@@ -570,6 +590,11 @@ deliveriesRouter.post("/:id/confirm", uploadConfirmationPhoto.single("photo"), a
 
     if (organization.exigirFotoConfirmacao && !uploadedFile) {
       throw badRequest("Esta empresa exige a foto do colaborador na confirmação de recebimento.");
+    }
+
+    // Uma imagem corrompida não pode ser gravada: ela quebraria o termo de entrega depois.
+    if (uploadedFile && !imagemSeguraParaPdf(uploadedFile.path)) {
+      throw badRequest("A foto enviada está corrompida ou em formato não suportado. Capture a foto novamente (JPG ou PNG).");
     }
 
     const result = await prisma.$transaction(async (tx) => {

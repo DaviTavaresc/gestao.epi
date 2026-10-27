@@ -107,8 +107,8 @@ export default function SuppliersPage() {
               cell: (s) =>
                 canEdit && (
                   <div className="flex justify-end gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(s)}><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="sm" onClick={() => setToggling(s)}><Power className="h-4 w-4" /></Button>
+                    <Button title="Editar fornecedor" variant="ghost" size="sm" onClick={() => openEdit(s)}><Pencil className="h-4 w-4" /></Button>
+                    <Button title="Ativar ou inativar fornecedor" variant="ghost" size="sm" onClick={() => setToggling(s)}><Power className="h-4 w-4" /></Button>
                   </div>
                 ),
               className: "text-right",

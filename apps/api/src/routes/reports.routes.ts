@@ -247,11 +247,12 @@ async function buildReport(
       const rows: Row[] = items
         .map((i) => ({ i, status: computeCaStatus(i.caValidade, now, thresholds) }))
         .filter(({ status }) => (type === "ca-vencidos" ? status === "VENCIDO" : status === "PROXIMO_VENCIMENTO"))
+        // O filtro acima só deixa passar itens com CA, então ca e caValidade existem.
         .map(({ i }) => ({
           epi: i.nome,
           categoria: i.category.nome,
-          ca: i.ca,
-          validade: i.caValidade.toLocaleDateString("pt-BR"),
+          ca: i.ca!,
+          validade: i.caValidade!.toLocaleDateString("pt-BR"),
         }));
       return {
         title: type === "ca-vencidos" ? "CAs Vencidos" : "CAs Próximos do Vencimento",

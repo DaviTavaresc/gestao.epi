@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma";
 import { requireAuth } from "../middleware/auth";
 import { requireWriteRole } from "../middleware/rbac";
@@ -8,6 +9,8 @@ import { parsePagination, toSkipTake, buildPageResult } from "../utils/paginatio
 import { writeAuditLog } from "../utils/audit";
 import { applyStockMovement } from "../utils/stock";
 import { resolveBranchFilter } from "../utils/branchScope";
+import { custoUnitarioDeReferencia, estadoGeraCobranca } from "../utils/charges";
+import { booleanDoFormulario } from "../utils/zodHelpers";
 
 export const ppeReturnsRouter = Router();
 ppeReturnsRouter.use(requireAuth, requireWriteRole("ALMOXARIFADO"));
@@ -52,6 +55,16 @@ const createSchema = z.object({
   motivo: z.enum(["TROCA", "DESLIGAMENTO", "VENCIMENTO", "DANIFICACAO", "APOSENTADORIA", "OUTRO"]),
   estado: z.enum(["BOM", "REGULAR", "DANIFICADO", "INUTILIZAVEL"]),
   observacoes: z.string().optional().nullable(),
+  // EPI danificado/inutilizável gera cobrança do colaborador por padrão.
+  // Marque false quando o dano não for de responsabilidade dele (desgaste natural, defeito de fábrica).
+  gerarCobranca: booleanDoFormulario(true),
+  // Em branco, o sistema usa o custo unitário da filial (vindo da nota fiscal).
+  valorUnitarioCobranca: z.coerce.number().nonnegative().optional().nullable(),
+  competenciaCobranca: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/, "Competência deve estar no formato AAAA-MM.")
+    .optional()
+    .nullable(),
 });
 
 ppeReturnsRouter.post("/", async (req, res, next) => {
@@ -80,10 +93,47 @@ ppeReturnsRouter.post("/", async (req, res, next) => {
     // Apenas itens em boas condições reutilizáveis retornam ao estoque.
     const retornouEstoque = data.estado === "BOM" || data.estado === "REGULAR";
 
+    const { gerarCobranca, valorUnitarioCobranca, competenciaCobranca, ...returnData } = data;
+    const deveCobrar = estadoGeraCobranca(data.estado) && gerarCobranca !== false;
+
     const result = await prisma.$transaction(async (tx) => {
       const ppeReturn = await tx.ppeReturn.create({
-        data: { ...data, organizationId, userId, retornouEstoque },
+        data: { ...returnData, organizationId, userId, retornouEstoque },
       });
+
+      // EPI que não volta ao estoque virou prejuízo: lança a cobrança contra o colaborador
+      // para o RH descontar em folha, usando o custo da nota fiscal da filial.
+      let charge = null;
+      if (deveCobrar) {
+        const valorUnitario =
+          valorUnitarioCobranca != null && valorUnitarioCobranca > 0
+            ? new Prisma.Decimal(valorUnitarioCobranca)
+            : await custoUnitarioDeReferencia(tx, organizationId, employee.branchId, ppeItem.id);
+
+        if (valorUnitario.isZero()) {
+          throw badRequest(
+            "Não há custo unitário cadastrado para este EPI nesta filial. Informe o valor da cobrança ou registre a nota fiscal da compra."
+          );
+        }
+
+        charge = await tx.employeeCharge.create({
+          data: {
+            organizationId,
+            branchId: employee.branchId,
+            employeeId: employee.id,
+            ppeItemId: ppeItem.id,
+            deliveryItemId: data.deliveryItemId ?? null,
+            ppeReturnId: ppeReturn.id,
+            quantidade: data.quantidade,
+            valorUnitario,
+            valorTotal: valorUnitario.mul(data.quantidade),
+            motivo: "DANIFICACAO",
+            competencia: competenciaCobranca ?? null,
+            observacoes: `Gerada automaticamente pela devolução (${data.estado.toLowerCase()}).`,
+            createdById: userId,
+          },
+        });
+      }
 
       // Item reutilizável volta para o estoque da filial do colaborador.
       if (retornouEstoque) {
@@ -103,9 +153,20 @@ ppeReturnsRouter.post("/", async (req, res, next) => {
         await tx.deliveryItem.update({ where: { id: data.deliveryItemId }, data: { status: "DEVOLVIDO" } });
       }
 
-      await writeAuditLog(tx, { organizationId, userId, action: "DEVOLUCAO", entityType: "PpeReturn", entityId: ppeReturn.id, newData: data });
+      await writeAuditLog(tx, { organizationId, userId, action: "DEVOLUCAO", entityType: "PpeReturn", entityId: ppeReturn.id, newData: returnData });
 
-      return ppeReturn;
+      if (charge) {
+        await writeAuditLog(tx, {
+          organizationId,
+          userId,
+          action: "CRIACAO",
+          entityType: "EmployeeCharge",
+          entityId: charge.id,
+          newData: { origem: "devolucao", employee: employee.nomeCompleto, epi: ppeItem.nome, valorTotal: charge.valorTotal.toFixed(2) },
+        });
+      }
+
+      return { ...ppeReturn, cobranca: charge };
     });
 
     res.status(201).json(result);

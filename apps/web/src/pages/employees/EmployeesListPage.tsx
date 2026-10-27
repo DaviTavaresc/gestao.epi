@@ -163,7 +163,7 @@ export default function EmployeesListPage() {
               header: "",
               cell: (e) =>
                 canEdit && (
-                  <Button variant="ghost" size="sm" onClick={(evt) => { evt.stopPropagation(); openEdit(e); }}>
+                  <Button title="Editar colaborador" variant="ghost" size="sm" onClick={(evt) => { evt.stopPropagation(); openEdit(e); }}>
                     <Pencil className="h-4 w-4" />
                   </Button>
                 ),

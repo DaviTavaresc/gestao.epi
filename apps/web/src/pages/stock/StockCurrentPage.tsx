@@ -174,10 +174,14 @@ export default function StockCurrentPage() {
             {
               header: "CA",
               cell: (s) =>
-                s.caStatus && (
-                  <Badge tone={s.caStatus === "VENCIDO" ? "danger" : s.caStatus === "PROXIMO_VENCIMENTO" ? "warning" : "success"}>
-                    {s.ppeItem.ca}
-                  </Badge>
+                s.caStatus === "NAO_APLICAVEL" || !s.ppeItem.ca ? (
+                  <span className="text-xs text-slate-400">—</span>
+                ) : (
+                  s.caStatus && (
+                    <Badge tone={s.caStatus === "VENCIDO" ? "danger" : s.caStatus === "PROXIMO_VENCIMENTO" ? "warning" : "success"}>
+                      {s.ppeItem.ca}
+                    </Badge>
+                  )
                 ),
             },
             { header: "Status", cell: (s) => s.stockStatus && <StatusBadge status={s.stockStatus} /> },

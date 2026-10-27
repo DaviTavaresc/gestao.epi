@@ -8,6 +8,7 @@ import { badRequest, notFound } from "../utils/httpError";
 import { writeAuditLog } from "../utils/audit";
 import { uploadLogo, logosDir } from "../utils/upload";
 import fs from "fs";
+import { booleanDoFormulario } from "../utils/zodHelpers";
 
 export const organizationRouter = Router();
 
@@ -44,7 +45,7 @@ const updateSchema = z.object({
   alertDaysCritico: z.coerce.number().int().min(1).max(90),
   alertDaysAtencao: z.coerce.number().int().min(1).max(90),
   alertDaysProximo: z.coerce.number().int().min(1).max(180),
-  exigirFotoConfirmacao: z.coerce.boolean().optional(),
+  exigirFotoConfirmacao: booleanDoFormulario(true).optional(),
 });
 
 organizationRouter.put("/", requireRole("ADMIN"), async (req, res, next) => {

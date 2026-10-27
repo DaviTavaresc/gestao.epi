@@ -79,14 +79,47 @@ Cada filial é um almoxarifado independente:
 
 ## Foto na confirmação de recebimento
 
-A confirmação eletrônica aceita uma foto capturada pela câmera do notebook ou do celular, no estilo do registro de
-ponto por selfie. A foto é opcional por padrão e pode ser tornada **obrigatória** em Configurações
-("Exigir foto do colaborador na confirmação").
+A confirmação eletrônica exige uma foto capturada pela câmera do notebook ou do celular, no estilo do registro de
+ponto por selfie. A foto é **obrigatória por padrão**; quem quiser torná-la opcional desmarca
+"Exigir foto do colaborador na confirmação" em Configurações.
 
 - A foto fica fora da pasta pública, servida apenas por rota autenticada e restrita à organização/filial.
 - O termo de entrega em PDF traz a foto, a data e a **hora** da entrega, a filial e os dados da confirmação.
 - A captura exige contexto seguro do navegador: funciona em `localhost` e, em produção, **somente sob HTTPS**.
 - Atenção à LGPD: imagem de rosto é dado pessoal — defina retenção e informe o colaborador antes de exigir a foto.
+
+## Uniformes e camisas (itens sem CA)
+
+Camisa, calça e vestuário em geral entram como **item de EPI sem Certificado de Aprovação**, e não como um
+módulo separado. No cadastro do EPI, desmarque **"Este item tem Certificado de Aprovação (CA)"**:
+
+- O item deixa de pedir CA e validade, sai dos alertas e do relatório de CA vencido, e nunca é bloqueado por CA.
+- Continua com tudo o que importa para o controle: estoque por filial, matriz por cargo, kits, entrega com
+  confirmação eletrônica e foto, termo de entrega em PDF, devolução, troca e cobrança por dano.
+- Na importação por planilha, deixe as colunas `ca` e `caValidade` em branco para o item nascer sem CA.
+- **Tamanho é um item por tamanho** (`Camisa Manga Curta - Tam P`, `- Tam M`, …), com código interno
+  `CAM-MC-P`, `CAM-MC-M` e assim por diante. Isso mantém o saldo correto por tamanho em cada filial. Como o
+  tamanho varia de pessoa para pessoa, a matriz do cargo não escolhe o tamanho: quem entrega seleciona o
+  tamanho certo em "Adicionar outro EPI" ou pelo kit de uniforme.
+- Um item pode virar EPI com CA depois (e voltar atrás) marcando a opção de novo — o CA é limpo quando o item
+  volta a ser uniforme, para não ficar dado morto na tela.
+
+## Cobrança de EPI danificado
+
+Quando o EPI não volta ao estoque por responsabilidade do colaborador, o sistema lança uma **cobrança** para o RH
+descontar em folha:
+
+- O valor sai do **custo unitário da filial**, que é atualizado a cada recebimento de nota fiscal em Compras.
+  A nota fiscal em si pode ser anexada na tela da compra (PDF/JPG/PNG), ficando como comprovante do custo.
+- Registrar uma devolução com estado **Danificado** ou **Inutilizável** já oferece a cobrança marcada. Basta
+  desmarcar quando o dano não for do colaborador (desgaste natural, defeito de fábrica).
+- Também é possível lançar uma cobrança manual em **Operações › Cobranças** (perda, não devolução, mau uso).
+- Cada cobrança gera um **Termo de Responsabilidade e Autorização de Desconto** em PDF, para assinatura física,
+  citando a NR-6, o artigo 158 e o artigo 462, § 1º, da CLT. O termo de entrega também avisa o colaborador, no ato
+  do recebimento, de que o valor pode ser descontado em caso de dano por responsabilidade dele.
+- Fluxo: `PENDENTE` → `DESCONTADO` (exige a competência AAAA-MM), `PERDOADO` (exige motivo, só ADMIN) ou
+  `CANCELADO` (só ADMIN). Cobrança já descontada não pode ser editada nem revertida.
+- A tela exporta um **Excel para o RH** com matrícula, CPF, valor e competência, filtrável por filial e competência.
 
 ## Migrações de banco
 
@@ -112,14 +145,15 @@ apps/
 
 Autenticação (login, registro de empresa, recuperação de senha, sessão persistente), RBAC real no backend (4 perfis),
 multiempresa com isolamento por `organizationId` em toda consulta, **filiais com estoque e acesso próprios**,
-Colaboradores/Cargos/Setores, EPIs/Categorias/Kits, Matriz Cargo x EPI com motor de regras (CA vencido bloqueia entrega,
+Colaboradores/Cargos/Setores, EPIs/Categorias/Kits (**incluindo uniformes e camisas como itens sem CA**), Matriz Cargo x EPI com motor de regras (CA vencido bloqueia entrega,
 estoque insuficiente na filial bloqueia, etc.), Estoque por filial com movimentações auditáveis, Compras com recebimento
 transacional (entrada na filial de destino), Fornecedores, Entregas com fluxo completo (preparação inteligente → baixa do
 estoque da filial → confirmação eletrônica por digitação de nome **+ foto pela câmera** → termo de entrega em PDF com a
 foto e o horário), Devoluções, Trocas, Calendário de substituições, Alertas automáticos por filial (estoque, CA, vida
-útil), Notificações roteadas por perfil e filial, Relatórios (17 tipos, exportação Excel/PDF), Custos, Auditoria
-completa, Usuários/Permissões/Filial, Configurações da empresa (incluindo logo), Busca global, Importação de planilhas
-Excel com validação prévia.
+útil), Notificações roteadas por perfil e filial, **Cobranças de EPI danificado/perdido com termo de autorização de
+desconto e exportação para o RH**, Relatórios (17 tipos, exportação Excel/PDF), Custos, Auditoria completa,
+Usuários/Permissões/Filial, Configurações da empresa (incluindo logo), Busca global, Importação de planilhas Excel com
+validação prévia.
 
 ## Pendências conhecidas / próximos passos sugeridos
 

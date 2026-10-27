@@ -93,8 +93,8 @@ export default function PpeCategoriesPage() {
               cell: (c) =>
                 canEdit && (
                   <div className="flex justify-end gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(c)}><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="sm" onClick={() => setToggling(c)}><Power className="h-4 w-4" /></Button>
+                    <Button title="Editar categoria" variant="ghost" size="sm" onClick={() => openEdit(c)}><Pencil className="h-4 w-4" /></Button>
+                    <Button title="Ativar ou inativar categoria" variant="ghost" size="sm" onClick={() => setToggling(c)}><Power className="h-4 w-4" /></Button>
                   </div>
                 ),
               className: "text-right",

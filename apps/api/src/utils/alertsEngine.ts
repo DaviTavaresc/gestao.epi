@@ -53,7 +53,8 @@ export async function refreshAlerts(organizationId: string) {
   }
 
   // Validade de CA é uma característica do EPI no catálogo, não de uma filial.
-  const ppeItems = await prisma.ppeItem.findMany({ where: { organizationId, status: "ATIVO" } });
+  // Itens sem CA (uniformes) ficam fora: não têm certificado para vencer.
+  const ppeItems = await prisma.ppeItem.findMany({ where: { organizationId, status: "ATIVO", exigeCa: true } });
   for (const item of ppeItems) {
     const caStatus = computeCaStatus(item.caValidade, now, thresholds);
     if (caStatus === "VENCIDO") {
@@ -61,7 +62,7 @@ export async function refreshAlerts(organizationId: string) {
         tipo: "CA_VENCIDO",
         prioridade: "CRITICO",
         titulo: `CA vencido: ${item.nome}`,
-        mensagem: `O Certificado de Aprovação do EPI "${item.nome}" (CA ${item.ca}) está vencido desde ${item.caValidade.toLocaleDateString("pt-BR")}.`,
+        mensagem: `O Certificado de Aprovação do EPI "${item.nome}" (CA ${item.ca}) está vencido desde ${item.caValidade!.toLocaleDateString("pt-BR")}.`,
         referenceType: "PpeItem",
         referenceId: item.id,
         branchId: null,
@@ -71,7 +72,7 @@ export async function refreshAlerts(organizationId: string) {
         tipo: "CA_PROXIMO_VENCIMENTO",
         prioridade: "ATENCAO",
         titulo: `CA próximo do vencimento: ${item.nome}`,
-        mensagem: `O CA ${item.ca} do EPI "${item.nome}" vence em ${item.caValidade.toLocaleDateString("pt-BR")}.`,
+        mensagem: `O CA ${item.ca} do EPI "${item.nome}" vence em ${item.caValidade!.toLocaleDateString("pt-BR")}.`,
         referenceType: "PpeItem",
         referenceId: item.id,
         branchId: null,

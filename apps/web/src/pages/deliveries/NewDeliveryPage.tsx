@@ -39,6 +39,26 @@ type PrepareResponse = {
   itensSugeridos: SuggestedItem[];
 };
 
+// Explica por que o item sugerido não pode ser marcado. "informativo" distingue o caso
+// normal (o colaborador já tem o EPI em uso) dos bloqueios que exigem ação.
+function motivoBloqueio(item: SuggestedItem): { texto: string; informativo: boolean } {
+  if (item.caStatus === "VENCIDO") return { texto: "CA vencido — entrega bloqueada", informativo: false };
+  if (item.ppeItem.status !== "ATIVO") return { texto: "EPI inativo no catálogo", informativo: false };
+  if (item.status === "REGULAR") {
+    const troca = item.ultimaEntrega
+      ? ` — troca prevista para ${new Date(item.ultimaEntrega.dataPrevistaTroca).toLocaleDateString("pt-BR")}`
+      : "";
+    return {
+      texto: `Já em uso e dentro da vida útil${troca}. Para entregar antes da hora, use "Adicionar outro EPI".`,
+      informativo: true,
+    };
+  }
+  if (!item.estoqueSuficiente) {
+    return { texto: `Estoque insuficiente nesta filial (${item.estoqueDisponivel} de ${item.quantidadeExigida})`, informativo: false };
+  }
+  return { texto: "EPI indisponível", informativo: false };
+}
+
 const motivos = [
   { value: "PRIMEIRA_ENTREGA", label: "Primeira entrega" },
   { value: "SUBSTITUICAO", label: "Substituição" },
@@ -226,12 +246,13 @@ export default function NewDeliveryPage() {
                       <div className="flex-1">
                         <p className="font-medium text-slate-700">{item.ppeItem.nome}</p>
                         <p className="text-xs text-slate-400">
-                          CA {item.ppeItem.ca} · Estoque: {item.estoqueDisponivel} · Exigido: {item.quantidadeExigida}
+                          {item.ppeItem.ca ? `CA ${item.ppeItem.ca} · ` : ""}Estoque: {item.estoqueDisponivel} · Exigido:{" "}
+                          {item.quantidadeExigida}
                         </p>
                         {!item.podeEntregar && (
-                          <p className="flex items-center gap-1 text-xs text-red-600">
+                          <p className={`flex items-center gap-1 text-xs ${motivoBloqueio(item).informativo ? "text-amber-600" : "text-red-600"}`}>
                             <AlertTriangle className="h-3 w-3" />
-                            {item.caStatus === "VENCIDO" ? "CA vencido — entrega bloqueada" : !item.estoqueSuficiente ? "Estoque insuficiente" : "EPI indisponível"}
+                            {motivoBloqueio(item).texto}
                           </p>
                         )}
                       </div>
@@ -325,8 +346,11 @@ export default function NewDeliveryPage() {
             </InlineBanner>
 
             <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">
-              Declaro que recebi os EPIs relacionados nesta entrega e estou ciente da responsabilidade pela utilização,
-              conservação e comunicação de qualquer necessidade de substituição.
+              Declaro que recebi os EPIs relacionados nesta entrega em perfeitas condições de uso e estou ciente da
+              responsabilidade pela utilização, conservação, guarda e comunicação de qualquer necessidade de
+              substituição. Estou ciente de que, em caso de dano, extravio ou não devolução por minha
+              responsabilidade, o valor do equipamento poderá ser descontado da minha remuneração, nos termos do
+              artigo 462, § 1º, da CLT.
             </p>
 
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">

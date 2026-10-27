@@ -158,7 +158,7 @@ export default function DeliveryDetailPage() {
               {delivery.items.map((item) => (
                 <tr key={item.id} className="border-b border-slate-50">
                   <td className="px-5 py-3">{item.ppeItem.nome}</td>
-                  <td className="px-5 py-3">{item.caSnapshot}</td>
+                  <td className="px-5 py-3">{item.caSnapshot ?? "—"}</td>
                   <td className="px-5 py-3">{item.quantidade}</td>
                   <td className="px-5 py-3">{new Date(item.dataPrevistaTroca).toLocaleDateString("pt-BR")}</td>
                   <td className="px-5 py-3"><StatusBadge status={item.status} /></td>
@@ -196,8 +196,11 @@ export default function DeliveryDetailPage() {
           ) : delivery.status === "PENDENTE" ? (
             <>
               <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">
-                Declaro que recebi os EPIs relacionados nesta entrega e estou ciente da responsabilidade pela utilização,
-                conservação e comunicação de qualquer necessidade de substituição.
+                Declaro que recebi os EPIs relacionados nesta entrega em perfeitas condições de uso e estou ciente da
+                responsabilidade pela utilização, conservação, guarda e comunicação de qualquer necessidade de
+                substituição. Estou ciente de que, em caso de dano, extravio ou não devolução por minha
+                responsabilidade, o valor do equipamento poderá ser descontado da minha remuneração, nos termos do
+                artigo 462, § 1º, da CLT.
               </p>
               <Input
                 label="Digite seu nome completo para confirmar"
