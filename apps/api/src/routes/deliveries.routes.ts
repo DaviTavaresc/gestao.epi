@@ -8,14 +8,13 @@ import { badRequest, conflict, forbidden, notFound } from "../utils/httpError";
 import { parsePagination, toSkipTake, buildPageResult } from "../utils/pagination";
 import { writeAuditLog } from "../utils/audit";
 import { computeLifecycleStatus, effectiveItemStatus, computeCaStatus } from "../utils/ppeStatus";
-import { imagemSeguraParaPdf } from "../utils/imageSafety";
+import { imagemBufferSeguraParaPdf } from "../utils/imageSafety";
 import { namesMatch } from "../utils/nameMatch";
 import { generateDeliveryTermPdf } from "../utils/pdf";
-import { logosDir, confirmationPhotosDir, uploadConfirmationPhoto } from "../utils/upload";
+import { uploadConfirmationPhoto } from "../utils/upload";
+import { armazenamento, nomeUnico } from "../utils/storage";
 import { applyStockMovement } from "../utils/stock";
 import { assertBranchAllowed, resolveBranchFilter } from "../utils/branchScope";
-import fs from "fs";
-import path from "path";
 
 export const deliveriesRouter = Router();
 deliveriesRouter.use(requireAuth, requireWriteRole("ALMOXARIFADO", "SEGURANCA_TRABALHO"));
@@ -499,7 +498,7 @@ deliveriesRouter.get("/:id/termo.pdf", async (req, res, next) => {
     const delivery = await prisma.delivery.findFirst({
       where: { id: req.params.id, organizationId, ...resolveBranchFilter(req.user!) },
       include: {
-        employee: { include: { position: true, department: true, branch: true } },
+        employee: { include: { position: true, department: true, branch: true, contractBranch: true } },
         branch: true,
         items: { include: { ppeItem: true } },
         confirmation: true,
@@ -510,16 +509,19 @@ deliveriesRouter.get("/:id/termo.pdf", async (req, res, next) => {
 
     const organization = await prisma.organization.findUniqueOrThrow({ where: { id: organizationId } });
     const logoFilename = organization.logoUrl?.split("/").pop();
-    const photoPath = delivery.confirmation?.photoPath
-      ? path.join(confirmationPhotosDir, delivery.confirmation.photoPath)
-      : null;
+    const [logo, photo] = await Promise.all([
+      logoFilename ? armazenamento.ler("logos", decodeURIComponent(logoFilename)) : Promise.resolve(null),
+      delivery.confirmation?.photoPath
+        ? armazenamento.ler("confirmations", delivery.confirmation.photoPath)
+        : Promise.resolve(null),
+    ]);
 
     generateDeliveryTermPdf(res, {
       organization: {
         razaoSocial: organization.razaoSocial,
         cnpj: organization.cnpj,
         endereco: organization.endereco,
-        logoPath: logoFilename ? path.join(logosDir, decodeURIComponent(logoFilename)) : null,
+        logo,
       },
       employee: {
         nomeCompleto: delivery.employee.nomeCompleto,
@@ -528,6 +530,8 @@ deliveriesRouter.get("/:id/termo.pdf", async (req, res, next) => {
         cargo: delivery.employee.position?.nome,
         setor: delivery.employee.department?.nome,
         filial: delivery.branch?.nome ?? delivery.employee.branch?.nome,
+        filialContrato: delivery.employee.contractBranch?.nome ?? null,
+        cnpjContrato: delivery.employee.contractBranch?.cnpj ?? null,
       },
       delivery: {
         id: delivery.id,
@@ -544,7 +548,7 @@ deliveriesRouter.get("/:id/termo.pdf", async (req, res, next) => {
             nomeDigitado: delivery.confirmation.nomeDigitado,
             confirmedAt: delivery.confirmation.confirmedAt,
             id: delivery.confirmation.id,
-            photoPath: photoPath && fs.existsSync(photoPath) ? photoPath : null,
+            photo,
           }
         : null,
     });
@@ -562,10 +566,13 @@ const confirmSchema = z.object({
 });
 
 deliveriesRouter.post("/:id/confirm", uploadConfirmationPhoto.single("photo"), async (req, res, next) => {
+  // A foto chega em memória e só é gravada quando a confirmação passa por todas as
+  // validações: requisição recusada não deixa arquivo para trás.
   const uploadedFile = req.file;
-  // Remove o arquivo salvo quando a confirmação é rejeitada por qualquer motivo.
-  const discardUpload = () => {
-    if (uploadedFile && fs.existsSync(uploadedFile.path)) fs.unlinkSync(uploadedFile.path);
+  let chaveDaFoto: string | null = null;
+  // Se a transação falhar depois de gravar a foto, remove o arquivo órfão.
+  const descartarFotoGravada = async () => {
+    if (chaveDaFoto) await armazenamento.remover("confirmations", chaveDaFoto).catch(() => undefined);
   };
 
   try {
@@ -593,8 +600,13 @@ deliveriesRouter.post("/:id/confirm", uploadConfirmationPhoto.single("photo"), a
     }
 
     // Uma imagem corrompida não pode ser gravada: ela quebraria o termo de entrega depois.
-    if (uploadedFile && !imagemSeguraParaPdf(uploadedFile.path)) {
+    if (uploadedFile && !imagemBufferSeguraParaPdf(uploadedFile.buffer)) {
       throw badRequest("A foto enviada está corrompida ou em formato não suportado. Capture a foto novamente (JPG ou PNG).");
+    }
+
+    if (uploadedFile) {
+      chaveDaFoto = nomeUnico(uploadedFile.mimetype);
+      await armazenamento.salvar("confirmations", chaveDaFoto, uploadedFile.buffer, uploadedFile.mimetype);
     }
 
     const result = await prisma.$transaction(async (tx) => {
@@ -606,7 +618,7 @@ deliveriesRouter.post("/:id/confirm", uploadConfirmationPhoto.single("photo"), a
           nomeDigitado: data.nomeDigitado,
           nomeCadastradoSnapshot: delivery.employee.nomeCompleto,
           method: "CONFIRMACAO_ELETRONICA_DIGITACAO",
-          photoPath: uploadedFile?.filename ?? null,
+          photoPath: chaveDaFoto,
           photoMimeType: uploadedFile?.mimetype ?? null,
           handledById: userId,
         },
@@ -645,7 +657,7 @@ deliveriesRouter.post("/:id/confirm", uploadConfirmationPhoto.single("photo"), a
 
     res.json(result);
   } catch (err) {
-    discardUpload();
+    await descartarFotoGravada();
     next(err);
   }
 });
@@ -661,12 +673,12 @@ deliveriesRouter.get("/:id/confirmation-photo", async (req, res, next) => {
     });
     if (!delivery?.confirmation?.photoPath) throw notFound("Esta entrega não possui foto de confirmação.");
 
-    const filePath = path.join(confirmationPhotosDir, path.basename(delivery.confirmation.photoPath));
-    if (!fs.existsSync(filePath)) throw notFound("Arquivo de foto não encontrado.");
+    const conteudo = await armazenamento.ler("confirmations", delivery.confirmation.photoPath);
+    if (!conteudo) throw notFound("Arquivo de foto não encontrado.");
 
     res.setHeader("Content-Type", delivery.confirmation.photoMimeType ?? "image/jpeg");
     res.setHeader("Cache-Control", "private, max-age=3600");
-    fs.createReadStream(filePath).pipe(res);
+    res.send(conteudo);
   } catch (err) {
     next(err);
   }

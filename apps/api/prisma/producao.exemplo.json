@@ -1,0 +1,55 @@
+{
+  "_leia": "Copie para prisma/producao.json e preencha com os dados reais. O arquivo producao.json nao e versionado porque contem a senha provisoria do administrador.",
+
+  "empresa": {
+    "razaoSocial": "RAZAO SOCIAL DA EMPRESA LTDA",
+    "nomeFantasia": "NOME FANTASIA",
+    "cnpj": "00.000.000/0000-00",
+    "telefone": "(00) 0000-0000",
+    "email": "contato@empresa.com.br",
+    "endereco": "Rua Exemplo, 100 - Bairro - Cidade/UF - CEP 00000-000"
+  },
+
+  "administrador": {
+    "nome": "Nome Completo do Administrador",
+    "email": "nome@empresa.com.br",
+    "senhaProvisoria": "TroqueEstaSenha123"
+  },
+
+  "filiais": [
+    { "nome": "Matriz", "codigo": "MTZ", "cnpj": null, "uf": null, "cidade": null, "responsavel": null },
+    { "nome": "Filial Pará", "codigo": "PA", "cnpj": null, "uf": "PA", "cidade": null, "responsavel": null },
+    { "nome": "Filial Amazonas", "codigo": "AM", "cnpj": null, "uf": "AM", "cidade": null, "responsavel": null }
+  ],
+
+  "categoriasParaCopiar": [
+    "Proteção da cabeça",
+    "Proteção dos olhos",
+    "Proteção auditiva",
+    "Proteção respiratória",
+    "Proteção das mãos",
+    "Proteção dos pés",
+    "Proteção do corpo",
+    "Proteção contra quedas",
+    "Uniformes",
+    "Outros"
+  ],
+
+  "episParaCopiar": [
+    "EPI-001",
+    "EPI-002",
+    "EPI-003",
+    "EPI-004",
+    "CAM-MC-P",
+    "CAM-MC-M",
+    "CAM-MC-G",
+    "CAM-MC-GG",
+    "CAM-MC-XG",
+    "CAM-ML-P",
+    "CAM-ML-M",
+    "CAM-ML-G",
+    "CAM-ML-GG"
+  ],
+
+  "kitsParaCopiar": ["Kit Soldador", "Kit Uniforme (camisa manga curta M)"]
+}

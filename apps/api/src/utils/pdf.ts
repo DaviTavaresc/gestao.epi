@@ -1,7 +1,6 @@
 import PDFDocument from "pdfkit";
 import { Response } from "express";
-import fs from "fs";
-import { imagemSeguraParaPdf } from "./imageSafety";
+import { imagemBufferSeguraParaPdf } from "./imageSafety";
 
 export function exportListPdf(
   res: Response,
@@ -48,7 +47,8 @@ export function exportListPdf(
 }
 
 export type DeliveryTermData = {
-  organization: { razaoSocial: string; cnpj: string; endereco?: string | null; logoPath?: string | null };
+  // O logo vem como bytes: em produção ele não está em disco, e sim no Supabase Storage.
+  organization: { razaoSocial: string; cnpj: string; endereco?: string | null; logo?: Buffer | null };
   employee: {
     nomeCompleto: string;
     cpf: string;
@@ -56,6 +56,9 @@ export type DeliveryTermData = {
     cargo?: string | null;
     setor?: string | null;
     filial?: string | null;
+    // Filial do contrato de trabalho, quando diferente da filial onde trabalha.
+    filialContrato?: string | null;
+    cnpjContrato?: string | null;
   };
   delivery: {
     id: string;
@@ -67,7 +70,7 @@ export type DeliveryTermData = {
     canceladoEm?: Date | null;
   };
   items: { nome: string; ca: string | null; quantidade: number; dataPrevistaTroca: Date }[];
-  confirmation?: { nomeDigitado: string; confirmedAt: Date; id: string; photoPath?: string | null } | null;
+  confirmation?: { nomeDigitado: string; confirmedAt: Date; id: string; photo?: Buffer | null } | null;
 };
 
 export function generateDeliveryTermPdf(res: Response, data: DeliveryTermData) {
@@ -76,9 +79,9 @@ export function generateDeliveryTermPdf(res: Response, data: DeliveryTermData) {
   res.setHeader("Content-Disposition", `inline; filename="termo-entrega-${data.delivery.id}.pdf"`);
   doc.pipe(res);
 
-  if (imagemSeguraParaPdf(data.organization.logoPath)) {
+  if (data.organization.logo && imagemBufferSeguraParaPdf(data.organization.logo)) {
     try {
-      doc.image(data.organization.logoPath!, 50, 45, { width: 80 });
+      doc.image(data.organization.logo, 50, 45, { width: 80 });
     } catch {
       // Ignora falha ao renderizar logo — o termo segue sem a imagem.
     }
@@ -111,7 +114,13 @@ export function generateDeliveryTermPdf(res: Response, data: DeliveryTermData) {
   doc.text(`Colaborador: ${data.employee.nomeCompleto}`);
   doc.text(`CPF: ${data.employee.cpf}      Matrícula: ${data.employee.matricula}`);
   doc.text(`Cargo: ${data.employee.cargo ?? "-"}      Setor: ${data.employee.setor ?? "-"}`);
-  doc.text(`Filial: ${data.employee.filial ?? "-"}`);
+  doc.text(`Filial onde trabalha: ${data.employee.filial ?? "-"}`);
+  // O vinculo empregaticio pode ser com outra filial: e o CNPJ dela que vale no termo.
+  if (data.employee.cnpjContrato) {
+    doc.text(
+      `Contratado por: ${data.employee.filialContrato ?? "-"} — CNPJ ${data.employee.cnpjContrato}`
+    );
+  }
   doc.text(
     `Data e hora da entrega: ${data.delivery.createdAt.toLocaleDateString("pt-BR")} às ${data.delivery.createdAt.toLocaleTimeString("pt-BR")}`
   );
@@ -181,7 +190,7 @@ export function generateDeliveryTermPdf(res: Response, data: DeliveryTermData) {
 
   // Dados à esquerda; quando há foto da câmera, ela fica à direita, lado a lado.
   // Uma foto corrompida não pode derrubar a geração do termo (nem o processo).
-  const hasPhoto = imagemSeguraParaPdf(data.confirmation.photoPath);
+  const hasPhoto = !!data.confirmation.photo && imagemBufferSeguraParaPdf(data.confirmation.photo);
   const photoWidth = 130;
   const textWidth = hasPhoto ? fullWidth - photoWidth - 20 : fullWidth;
   const blockTop = doc.y;
@@ -197,7 +206,7 @@ export function generateDeliveryTermPdf(res: Response, data: DeliveryTermData) {
 
   if (hasPhoto) {
     try {
-      doc.image(data.confirmation.photoPath!, left + textWidth + 20, blockTop, { fit: [photoWidth, photoWidth] });
+      doc.image(data.confirmation.photo!, left + textWidth + 20, blockTop, { fit: [photoWidth, photoWidth] });
       doc.fontSize(7).fillColor("#64748b").text(
         "Foto do recebimento",
         left + textWidth + 20,
@@ -221,7 +230,8 @@ const motivoCobrancaLabel: Record<string, string> = {
 };
 
 export type ChargeTermData = {
-  organization: { razaoSocial: string; cnpj: string; endereco?: string | null; logoPath?: string | null };
+  // O logo vem como bytes: em produção ele não está em disco, e sim no Supabase Storage.
+  organization: { razaoSocial: string; cnpj: string; endereco?: string | null; logo?: Buffer | null };
   employee: {
     nomeCompleto: string;
     cpf: string;
@@ -229,6 +239,9 @@ export type ChargeTermData = {
     cargo?: string | null;
     setor?: string | null;
     filial?: string | null;
+    // Filial do contrato de trabalho, quando diferente da filial onde trabalha.
+    filialContrato?: string | null;
+    cnpjContrato?: string | null;
   };
   charge: {
     id: string;
@@ -253,9 +266,9 @@ export function generateChargeTermPdf(res: Response, data: ChargeTermData) {
   res.setHeader("Content-Disposition", `inline; filename="termo-cobranca-${data.charge.id}.pdf"`);
   doc.pipe(res);
 
-  if (imagemSeguraParaPdf(data.organization.logoPath)) {
+  if (data.organization.logo && imagemBufferSeguraParaPdf(data.organization.logo)) {
     try {
-      doc.image(data.organization.logoPath!, 50, 45, { width: 80 });
+      doc.image(data.organization.logo, 50, 45, { width: 80 });
     } catch {
       // Ignora falha ao renderizar logo — o termo segue sem a imagem.
     }
@@ -284,7 +297,10 @@ export function generateChargeTermPdf(res: Response, data: ChargeTermData) {
   doc.text(`Colaborador: ${data.employee.nomeCompleto}`);
   doc.text(`CPF: ${data.employee.cpf}      Matrícula: ${data.employee.matricula}`);
   doc.text(`Cargo: ${data.employee.cargo ?? "-"}      Setor: ${data.employee.setor ?? "-"}`);
-  doc.text(`Filial: ${data.employee.filial ?? "-"}`);
+  doc.text(`Filial onde trabalha: ${data.employee.filial ?? "-"}`);
+  if (data.employee.cnpjContrato) {
+    doc.text(`Contratado por: ${data.employee.filialContrato ?? "-"} — CNPJ ${data.employee.cnpjContrato}`);
+  }
   doc.text(`Data do lançamento: ${data.charge.criadoEm.toLocaleDateString("pt-BR")} às ${data.charge.criadoEm.toLocaleTimeString("pt-BR")}`);
   doc.text(`Responsável pelo lançamento: ${data.charge.responsavel}`);
   doc.moveDown();

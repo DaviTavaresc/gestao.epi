@@ -8,9 +8,8 @@ import { badRequest, conflict, notFound } from "../utils/httpError";
 import { parsePagination, toSkipTake, buildPageResult } from "../utils/pagination";
 import { writeAuditLog } from "../utils/audit";
 import { resolveBranchFilter, assertBranchAllowed } from "../utils/branchScope";
-import path from "path";
 import { generateChargeTermPdf } from "../utils/pdf";
-import { logosDir } from "../utils/upload";
+import { armazenamento } from "../utils/storage";
 import { sendExcel } from "../utils/excel";
 import { custoUnitarioDeReferencia } from "../utils/charges";
 
@@ -77,7 +76,7 @@ chargesRouter.get("/:id/termo.pdf", async (req, res, next) => {
     const charge = await prisma.employeeCharge.findFirst({
       where: { id: req.params.id, organizationId, ...resolveBranchFilter(req.user!) },
       include: {
-        employee: { include: { branch: true, position: true, department: true } },
+        employee: { include: { branch: true, contractBranch: true, position: true, department: true } },
         ppeItem: true,
         createdBy: { select: { name: true } },
       },
@@ -86,13 +85,14 @@ chargesRouter.get("/:id/termo.pdf", async (req, res, next) => {
 
     const organization = await prisma.organization.findUniqueOrThrow({ where: { id: organizationId } });
     const logoFilename = organization.logoUrl?.split("/").pop();
+    const logo = logoFilename ? await armazenamento.ler("logos", decodeURIComponent(logoFilename)) : null;
 
     generateChargeTermPdf(res, {
       organization: {
         razaoSocial: organization.razaoSocial,
         cnpj: organization.cnpj,
         endereco: organization.endereco,
-        logoPath: logoFilename ? path.join(logosDir, decodeURIComponent(logoFilename)) : null,
+        logo,
       },
       employee: {
         nomeCompleto: charge.employee.nomeCompleto,
@@ -101,6 +101,8 @@ chargesRouter.get("/:id/termo.pdf", async (req, res, next) => {
         cargo: charge.employee.position?.nome ?? null,
         setor: charge.employee.department?.nome ?? null,
         filial: charge.employee.branch?.nome ?? null,
+        filialContrato: charge.employee.contractBranch?.nome ?? null,
+        cnpjContrato: charge.employee.contractBranch?.cnpj ?? null,
       },
       charge: {
         id: charge.id,

@@ -6,19 +6,23 @@ import { requireAuth } from "../middleware/auth";
 import { requireRole } from "../middleware/rbac";
 import { badRequest, notFound } from "../utils/httpError";
 import { writeAuditLog } from "../utils/audit";
-import { uploadLogo, logosDir } from "../utils/upload";
-import fs from "fs";
+import { uploadLogo } from "../utils/upload";
+import { armazenamento } from "../utils/storage";
 import { booleanDoFormulario } from "../utils/zodHelpers";
 
 export const organizationRouter = Router();
 
 // Logo é um asset de marca de baixa sensibilidade (exibido em PDFs e na UI);
 // serve publicamente por nome de arquivo para simplificar o uso em <img> sem necessidade de header Authorization.
-organizationRouter.get("/logo/:filename", (req, res, next) => {
+organizationRouter.get("/logo/:filename", async (req, res, next) => {
   try {
-    const filePath = path.join(logosDir, path.basename(req.params.filename));
-    if (!fs.existsSync(filePath)) throw notFound("Logo não encontrada.");
-    res.sendFile(filePath);
+    const nome = path.basename(req.params.filename);
+    const conteudo = await armazenamento.ler("logos", nome);
+    if (!conteudo) throw notFound("Logo não encontrada.");
+    const extensao = path.extname(nome).toLowerCase();
+    const tipos: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".svg": "image/svg+xml" };
+    res.setHeader("Content-Type", tipos[extensao] ?? "application/octet-stream");
+    res.send(conteudo);
   } catch (err) {
     next(err);
   }
@@ -70,7 +74,12 @@ organizationRouter.post("/logo", requireRole("ADMIN"), uploadLogo.single("logo")
     const { organizationId, id: userId } = req.user!;
     if (!req.file) throw badRequest("Nenhum arquivo enviado.");
 
-    const logoUrl = `/api/organization/logo/${encodeURIComponent(req.file.filename)}`;
+    // O nome é fixo por organização, então trocar o logo substitui o anterior.
+    const extensoes: Record<string, string> = { "image/png": ".png", "image/jpeg": ".jpg", "image/svg+xml": ".svg" };
+    const nome = `${organizationId}${extensoes[req.file.mimetype] ?? ".png"}`;
+    await armazenamento.salvar("logos", nome, req.file.buffer, req.file.mimetype);
+
+    const logoUrl = `/api/organization/logo/${encodeURIComponent(nome)}`;
     const organization = await prisma.organization.update({ where: { id: organizationId }, data: { logoUrl } });
     await writeAuditLog(prisma, { organizationId, userId, action: "ALTERACAO", entityType: "Organization", entityId: organizationId, newData: { logoUrl } });
 

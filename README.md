@@ -77,6 +77,25 @@ Cada filial é um almoxarifado independente:
 - Usuário com filial definida só enxerga e opera a própria filial (regra aplicada no backend, não só na tela).
   Usuário sem filial (`branchId` nulo) tem visão corporativa de todas as filiais — é o caso de Admin e SST.
 
+## Filial de trabalho x filial do contrato
+
+O colaborador tem duas filiais, e elas servem a propósitos diferentes:
+
+- **Filial onde trabalha** (`branchId`): define de qual almoxarifado sai a entrega e qual usuário tem acesso
+  àquele colaborador. É obrigatória.
+- **Filial do contrato** (`contractBranchId`): a filial cujo CNPJ consta no contrato de trabalho. É opcional —
+  em branco, vale a filial onde a pessoa trabalha.
+
+Serve para o caso comum em grupos com várias inscrições: alguém trabalha em Manaus mas foi contratado pela filial
+de Rondônia. O estoque e o acesso continuam seguindo Manaus; o **termo de entrega e o termo de cobrança passam a
+imprimir o CNPJ do empregador correto**, que é o que vale como prova da entrega do EPI.
+
+Não existe cadastro separado de "empresa contratante": a filial já tem CNPJ próprio, então o empregador é sempre
+uma das filiais. Isso evita manter o mesmo CNPJ em dois lugares.
+
+Na importação por planilha a coluna é `filialContrato`, e aceita **o nome da filial ou o CNPJ dela** (com ou sem
+pontuação).
+
 ## Foto na confirmação de recebimento
 
 A confirmação eletrônica exige uma foto capturada pela câmera do notebook ou do celular, no estilo do registro de
@@ -120,6 +139,46 @@ descontar em folha:
 - Fluxo: `PENDENTE` → `DESCONTADO` (exige a competência AAAA-MM), `PERDOADO` (exige motivo, só ADMIN) ou
   `CANCELADO` (só ADMIN). Cobrança já descontada não pode ser editada nem revertida.
 - A tela exporta um **Excel para o RH** com matrícula, CPF, valor e competência, filtrável por filial e competência.
+
+## Onde ficam os arquivos (fotos, notas fiscais, logo)
+
+As fotos da confirmação de recebimento, as notas fiscais anexadas às compras e o logo passam por uma camada de
+armazenamento com dois motores, escolhidos por `STORAGE_DRIVER`:
+
+| Motor | Quando usar | Onde grava |
+|---|---|---|
+| `local` (padrão) | desenvolvimento | pasta `UPLOAD_DIR` (por padrão `apps/api/uploads`) |
+| `supabase` | **produção em hospedagem gratuita** | Supabase Storage, bucket `SUPABASE_BUCKET` |
+
+O motor `supabase` não é preferência, é necessidade: em Render, Fly, Koyeb e afins o disco é **efêmero** — ele é
+apagado a cada reinício e a cada deploy. Perder a foto da confirmação significa perder a prova de que o colaborador
+recebeu o EPI, que é o que vale na fiscalização. O banco sobreviveria; os arquivos não.
+
+Para migrar os arquivos que já estão em disco:
+
+```powershell
+cd apps/api
+$env:SUPABASE_URL="https://<ref>.supabase.co"
+$env:SUPABASE_SERVICE_KEY="<service role key>"
+$env:SUPABASE_BUCKET="epi-arquivos"
+npx tsx scripts/migrar-arquivos-para-supabase.ts
+```
+
+O script confere cada arquivo byte a byte no destino e **não apaga nada do disco** — o original fica até você
+validar o sistema no ar.
+
+A `SUPABASE_SERVICE_KEY` dá acesso total ao projeto: ela vive só no servidor, nunca no frontend e nunca no
+repositório.
+
+## Banco no Supabase
+
+O Supabase exige duas URLs, e esquecer a segunda faz o `prisma migrate` falhar:
+
+- `DATABASE_URL` — pelo *pooler*, porta **6543**, com `?pgbouncer=true&connection_limit=1`. É a que a aplicação usa.
+- `DIRECT_URL` — conexão direta, porta **5432**. É a que as migrações usam.
+
+No plano gratuito o projeto **pausa após cerca de uma semana sem acesso** e o primeiro acesso depois disso demora.
+Para uso diário não incomoda; depois de uma parada longa (férias coletivas), contar com isso.
 
 ## Migrações de banco
 

@@ -1,4 +1,3 @@
-import fs from "fs";
 import zlib from "zlib";
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -33,23 +32,9 @@ function pngDecodificavel(buffer: Buffer): boolean {
   }
 }
 
-// Diz se o arquivo pode ser embutido num PDF sem risco de derrubar o servidor.
+// Diz se os bytes podem ser embutidos num PDF sem risco de derrubar o servidor.
 // JPEG é decodificado de forma síncrona pelo pdfkit, então um try/catch ao redor
 // de doc.image() já dá conta; PNG precisa da checagem acima.
-export function imagemSeguraParaPdf(filePath: string | null | undefined): boolean {
-  if (!filePath) return false;
-
-  let buffer: Buffer;
-  try {
-    if (!fs.existsSync(filePath)) return false;
-    buffer = fs.readFileSync(filePath);
-  } catch {
-    return false;
-  }
-
-  return imagemBufferSeguraParaPdf(buffer);
-}
-
 export function imagemBufferSeguraParaPdf(buffer: Buffer): boolean {
   if (buffer.length < 4) return false;
 

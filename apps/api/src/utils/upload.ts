@@ -1,28 +1,14 @@
-import fs from "fs";
-import path from "path";
 import multer from "multer";
-import { env } from "../env";
 
-export const uploadRoot = path.resolve(process.cwd(), env.uploadDir);
-export const documentsDir = path.join(uploadRoot, "documents");
-export const logosDir = path.join(uploadRoot, "logos");
-export const confirmationPhotosDir = path.join(uploadRoot, "confirmations");
-
-for (const dir of [uploadRoot, documentsDir, logosDir, confirmationPhotosDir]) {
-  fs.mkdirSync(dir, { recursive: true });
-}
-
+// Os arquivos chegam em memória e quem grava é o módulo de armazenamento
+// (disco local em desenvolvimento, Supabase Storage em produção). Guardar em
+// memória mantém o limite de tamanho como única proteção necessária aqui, e
+// evita deixar arquivo órfão em disco quando a requisição é recusada depois.
 const allowedDocumentMimeTypes = new Set(["application/pdf", "image/jpeg", "image/png"]);
 const allowedLogoMimeTypes = new Set(["image/jpeg", "image/png", "image/svg+xml"]);
 
 export const uploadDocument = multer({
-  storage: multer.diskStorage({
-    destination: documentsDir,
-    filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname);
-      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
-    },
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (!allowedDocumentMimeTypes.has(file.mimetype)) {
@@ -35,13 +21,7 @@ export const uploadDocument = multer({
 // Foto capturada pela câmera na confirmação de recebimento.
 // Só aceita imagem e limita o tamanho — a captura do front já envia JPEG comprimido.
 export const uploadConfirmationPhoto = multer({
-  storage: multer.diskStorage({
-    destination: confirmationPhotosDir,
-    filename: (_req, file, cb) => {
-      const ext = file.mimetype === "image/png" ? ".png" : ".jpg";
-      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
-    },
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.mimetype)) {
@@ -52,13 +32,7 @@ export const uploadConfirmationPhoto = multer({
 });
 
 export const uploadLogo = multer({
-  storage: multer.diskStorage({
-    destination: logosDir,
-    filename: (req, file, cb) => {
-      const ext = path.extname(file.originalname);
-      cb(null, `${req.user!.organizationId}${ext}`);
-    },
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: 2 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (!allowedLogoMimeTypes.has(file.mimetype)) {
