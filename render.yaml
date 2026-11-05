@@ -1,0 +1,55 @@
+# Hospedagem gratuita no Render: UM serviço só, servindo a API e o site.
+#
+# Por que um serviço e nao dois: o login guarda o refresh token num cookie
+# SameSite=Lax, que o navegador so envia quando o site e a API estao na MESMA
+# origem. Em dois servicos cada um ganha seu subdominio (*.onrender.com), que o
+# navegador trata como sites diferentes - o cookie nao iria e o acesso cairia a
+# cada 15 minutos. Com um servico so nao ha CORS nem cookie de terceiros.
+#
+# Para subir: Render > New > Blueprint > aponte para este repositorio.
+# As variaveis marcadas "sync: false" o Render pede no painel, uma a uma, e nao
+# ficam no repositorio - e o caso da senha do banco e da service key do Supabase.
+services:
+  - type: web
+    name: epi-pneuforte
+    runtime: node
+    plan: free
+    region: oregon
+    # O Render tem a pasta de disco efemera: ela e apagada a cada deploy. Por isso
+    # STORAGE_DRIVER=supabase - a foto da confirmacao e prova da entrega do EPI.
+    #
+    # "--include=dev" e obrigatorio: com NODE_ENV=production o npm pularia as
+    # devDependencies, e sem tsc, vite e prisma o build nao roda.
+    buildCommand: npm ci --include=dev && npm run build && npm run prisma:deploy
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+      # Caminho relativo a apps/api, onde fica o React compilado (apps/web/dist).
+      - key: SERVE_WEB_DIR
+        value: ../web/dist
+      - key: STORAGE_DRIVER
+        value: supabase
+      - key: SUPABASE_BUCKET
+        value: epi-arquivos
+      # Gerados pelo Render, com valor aleatorio longo, e nunca exibidos no repo.
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      # Pooler do Supabase na 6543 (aplicacao) e conexao de sessao na 5432 (migracoes).
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      # Mesma origem do servico. Preencha com a URL que o Render der ao app,
+      # por exemplo https://epi-pneuforte.onrender.com
+      - key: CORS_ORIGIN
+        sync: false

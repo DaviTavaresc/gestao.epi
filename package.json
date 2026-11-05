@@ -10,6 +10,9 @@
     "dev:web": "npm run dev --workspace=apps/web",
     "build:api": "npm run build --workspace=apps/api",
     "build:web": "npm run build --workspace=apps/web",
+    "build": "npm run build:web && npm run build:api",
+    "start": "npm run start --workspace=apps/api",
+    "prisma:deploy": "npm run prisma:deploy --workspace=apps/api",
     "prisma:generate": "npm run prisma:generate --workspace=apps/api",
     "prisma:migrate": "npm run prisma:migrate --workspace=apps/api",
     "prisma:seed": "npm run prisma:seed --workspace=apps/api"

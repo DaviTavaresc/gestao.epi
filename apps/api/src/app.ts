@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import express from "express";
 import helmet from "helmet";
 import cors from "cors";
@@ -32,7 +34,21 @@ import { notFoundHandler, errorHandler } from "./middleware/errorHandler";
 
 export const app = express();
 
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        // A foto da confirmação é protegida: o front a baixa com o header
+        // Authorization e a exibe por URL de objeto (blob:) — a prévia da câmera
+        // também. O padrão do helmet é "img-src 'self' data:", que bloqueia blob:,
+        // e o bloqueio só apareceria em produção, onde o HTML sai desta aplicação.
+        // Sem blob: aqui, a prova da entrega do EPI não aparece na tela.
+        "img-src": ["'self'", "data:", "blob:"],
+      },
+    },
+  })
+);
 app.use(cors({ origin: env.corsOrigin, credentials: true }));
 app.use(cookieParser());
 app.use(express.json({ limit: "2mb" }));
@@ -64,6 +80,40 @@ app.use("/api/search", searchRouter);
 app.use("/api/documents", documentsRouter);
 app.use("/api/reports", reportsRouter);
 app.use("/api/imports", importsRouter);
+
+// Rota /api desconhecida responde em JSON. Tem de vir antes do frontend, senão o
+// cliente receberia o index.html com status 200 e tentaria lê-lo como JSON.
+app.use("/api", notFoundHandler);
+
+// ----- Frontend servido pela própria aplicação (produção) -----
+// Site e API na mesma origem: o cookie de refresh é SameSite=Lax e o navegador
+// não o envia entre domínios distintos. Nas hospedagens gratuitas cada serviço
+// recebe um subdomínio próprio (*.onrender.com, *.pages.dev) que o navegador
+// trata como site separado, e o login cairia a cada expiração do access token.
+if (env.serveWebDir) {
+  // Resolvido a partir de apps/api (o pai de src/ e de dist/), e não de
+  // process.cwd(), para que o mesmo valor sirva rodando por tsx ou compilado.
+  const raizWeb = path.isAbsolute(env.serveWebDir)
+    ? env.serveWebDir
+    : path.resolve(__dirname, "..", env.serveWebDir);
+  const indexHtml = path.join(raizWeb, "index.html");
+
+  if (!fs.existsSync(indexHtml)) {
+    throw new Error(
+      `SERVE_WEB_DIR aponta para "${raizWeb}", onde não existe index.html. ` +
+        `Rode o build do frontend antes de iniciar a aplicação.`
+    );
+  }
+
+  // Os arquivos de assets levam hash no nome, então podem ser cacheados por muito
+  // tempo. O index.html não: cacheado, o navegador continuaria pedindo o JS da
+  // versão anterior depois de um deploy, e a tela quebraria sem erro visível.
+  app.use(express.static(raizWeb, { index: false, maxAge: "1y" }));
+  app.get("*", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.sendFile(indexHtml);
+  });
+}
 
 app.use(notFoundHandler);
 app.use(errorHandler);
