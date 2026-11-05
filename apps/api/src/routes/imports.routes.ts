@@ -23,6 +23,22 @@ function parseDate(value: string): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+// A planilha do RH informa a filial do contrato pelo nome ou pelo CNPJ.
+// O CNPJ e comparado so por digitos, para aceitar com ou sem pontuacao.
+async function buscarFilialDoContrato(organizationId: string, valor: string) {
+  const texto = valor.trim();
+  if (!texto) return null;
+
+  const porNome = await prisma.branch.findFirst({ where: { organizationId, nome: texto } });
+  if (porNome) return porNome;
+
+  const digitos = texto.replace(/\D/g, "");
+  if (digitos.length !== 14) return null;
+
+  const todas = await prisma.branch.findMany({ where: { organizationId }, select: { id: true, cnpj: true } });
+  return todas.find((b) => (b.cnpj ?? "").replace(/\D/g, "") === digitos) ?? null;
+}
+
 async function validateDepartments(rows: Record<string, string>[], organizationId: string): Promise<RowResult[]> {
   return Promise.all(
     rows.map(async (data, idx) => {
@@ -52,6 +68,34 @@ async function validatePositions(rows: Record<string, string>[], organizationId:
 }
 
 async function validateEmployees(rows: Record<string, string>[], organizationId: string): Promise<RowResult[]> {
+  // CPF e matricula sao unicos no banco. Sem conferir repeticao DENTRO da planilha,
+  // o preview aprovaria tudo e a gravacao estouraria no meio da transacao, sem dizer
+  // qual linha causou o problema.
+  const linhasPorValor = (campo: string) => {
+    const mapa = new Map<string, number[]>();
+    rows.forEach((row, idx) => {
+      const valor = (row[campo] ?? "").trim();
+      if (!valor) return;
+      mapa.set(valor, [...(mapa.get(valor) ?? []), idx + 2]);
+    });
+    return mapa;
+  };
+  const cpfsNaPlanilha = linhasPorValor("cpf");
+
+  // A matricula e unica por empresa do contrato, nao por organizacao. A empresa e
+  // resolvida uma vez por linha porque o RH pode escrever o nome dela ou o CNPJ, e
+  // as duas formas tem de cair no mesmo grupo.
+  const empresaDaLinha = await Promise.all(
+    rows.map((row) => (row.filialContrato ? buscarFilialDoContrato(organizationId, row.filialContrato) : null))
+  );
+  const matriculasPorEmpresa = new Map<string, number[]>();
+  rows.forEach((row, idx) => {
+    const matricula = (row.matricula ?? "").trim();
+    if (!matricula) return;
+    const chave = (empresaDaLinha[idx]?.id ?? "sem-empresa") + "||" + matricula;
+    matriculasPorEmpresa.set(chave, [...(matriculasPorEmpresa.get(chave) ?? []), idx + 2]);
+  });
+
   return Promise.all(
     rows.map(async (data, idx) => {
       const errors: string[] = [];
@@ -60,16 +104,35 @@ async function validateEmployees(rows: Record<string, string>[], organizationId:
       if (!data.matricula) errors.push("Campo 'matricula' é obrigatório.");
       if (!data.dataAdmissao || !parseDate(data.dataAdmissao)) errors.push("Campo 'dataAdmissao' inválido (use AAAA-MM-DD ou DD/MM/AAAA).");
 
-      if (!data.filial) {
-        errors.push("Campo 'filial' é obrigatório.");
-      } else {
+      // A filial pode vir em branco: o RH nem sempre sabe onde a pessoa vai trabalhar.
+      // Sem filial o cadastro entra, mas o colaborador só recebe EPI depois que alguém
+      // definir a filial dele no sistema — o estoque é controlado por filial.
+      if (data.filial) {
         const branch = await prisma.branch.findFirst({ where: { organizationId, nome: data.filial } });
         if (!branch) errors.push(`Filial "${data.filial}" não encontrada.`);
       }
 
       if (data.cpf) {
+        const outras = (cpfsNaPlanilha.get(data.cpf.trim()) ?? []).filter((l) => l !== idx + 2);
+        if (outras.length) errors.push(`CPF repetido na própria planilha (também na linha ${outras.join(", ")}).`);
         const dup = await prisma.employee.findFirst({ where: { organizationId, cpf: data.cpf } });
         if (dup) errors.push("CPF já cadastrado.");
+      }
+      const empresa = empresaDaLinha[idx];
+      if (data.matricula) {
+        const chave = (empresa?.id ?? "sem-empresa") + "||" + data.matricula.trim();
+        const outras = (matriculasPorEmpresa.get(chave) ?? []).filter((l) => l !== idx + 2);
+        if (outras.length) {
+          errors.push(`Matrícula repetida na mesma empresa, na própria planilha (também na linha ${outras.join(", ")}).`);
+        }
+        const dup = await prisma.employee.findFirst({
+          where: { organizationId, contractBranchId: empresa?.id ?? null, matricula: data.matricula },
+        });
+        if (dup) errors.push("Matrícula já cadastrada nesta empresa.");
+      }
+      // Filial do contrato: o RH pode informar o nome da filial ou o CNPJ dela.
+      if (data.filialContrato && !empresa) {
+        errors.push(`Filial do contrato "${data.filialContrato}" não encontrada (informe o nome da filial ou o CNPJ dela).`);
       }
       if (data.cargo) {
         const position = await prisma.position.findFirst({ where: { organizationId, nome: data.cargo } });
@@ -158,6 +221,11 @@ importsRouter.post("/:type/commit", upload.single("file"), async (req, res, next
     }
 
     let imported = 0;
+    // Colaborador sem filial fica cadastrado mas nao recebe EPI, porque o estoque e por
+    // filial. A tela avisa quantos ficaram assim e quantos herdaram a filial do contrato.
+    const linhasEmployees = req.params.type === "employees" ? results : [];
+    const semFilial = linhasEmployees.filter((r) => !r.data.filial && !r.data.filialContrato).length;
+    const filialHerdada = linhasEmployees.filter((r) => !r.data.filial && !!r.data.filialContrato).length;
     await prisma.$transaction(async (tx) => {
       for (const { data } of results) {
         if (req.params.type === "departments") {
@@ -167,11 +235,19 @@ importsRouter.post("/:type/commit", upload.single("file"), async (req, res, next
         } else if (req.params.type === "employees") {
           const position = data.cargo ? await tx.position.findFirst({ where: { organizationId, nome: data.cargo } }) : null;
           const department = data.setor ? await tx.department.findFirst({ where: { organizationId, nome: data.setor } }) : null;
-          const branch = await tx.branch.findFirst({ where: { organizationId, nome: data.filial } });
+          const branch = data.filial
+            ? await tx.branch.findFirst({ where: { organizationId, nome: data.filial } })
+            : null;
+          const contractBranch = data.filialContrato
+            ? await buscarFilialDoContrato(organizationId, data.filialContrato)
+            : null;
           await tx.employee.create({
             data: {
               organizationId,
-              branchId: branch!.id,
+              // Sem filial de trabalho informada, vale a empresa do contrato: e onde a
+              // pessoa esta registrada. Quem trabalha em outra unidade se ajusta na tela.
+              branchId: branch?.id ?? contractBranch?.id ?? null,
+              contractBranchId: contractBranch?.id ?? null,
               nomeCompleto: data.nomeCompleto,
               cpf: data.cpf,
               matricula: data.matricula,
@@ -208,7 +284,7 @@ importsRouter.post("/:type/commit", upload.single("file"), async (req, res, next
       await writeAuditLog(tx, { organizationId, userId, action: "CRIACAO", entityType: `Import:${req.params.type}`, newData: { imported } });
     });
 
-    res.json({ imported });
+    res.json({ imported, semFilial, filialHerdada });
   } catch (err) {
     next(err);
   }

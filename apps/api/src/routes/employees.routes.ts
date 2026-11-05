@@ -17,6 +17,8 @@ const upsertSchema = z.object({
   cpf: z.string().min(11).max(14),
   matricula: z.string().min(1),
   branchId: z.string().min(1),
+  // Filial do contrato de trabalho. Em branco, assume-se a filial onde trabalha.
+  contractBranchId: z.string().min(1).optional().nullable(),
   positionId: z.string().min(1).optional().nullable(),
   departmentId: z.string().min(1).optional().nullable(),
   dataAdmissao: z.coerce.date(),
@@ -56,7 +58,7 @@ employeesRouter.get("/", async (req, res, next) => {
         where,
         orderBy: { nomeCompleto: "asc" },
         ...toSkipTake(pagination),
-        include: { position: true, department: true, branch: true },
+        include: { position: true, department: true, branch: true, contractBranch: true },
       }),
       prisma.employee.count({ where }),
     ]);
@@ -76,6 +78,7 @@ employeesRouter.get("/:id", async (req, res, next) => {
         position: { include: { requirements: { include: { ppeItem: true } } } },
         department: true,
         branch: true,
+        contractBranch: true,
       },
     });
     if (!employee) throw notFound("Colaborador não encontrado.");
@@ -159,6 +162,15 @@ employeesRouter.get("/:id", async (req, res, next) => {
   }
 });
 
+// A filial do contrato e apenas dado cadastral: nao define acesso nem estoque,
+// por isso qualquer filial da organizacao e aceita, inclusive de outro estado.
+async function resolverFilialDoContrato(organizationId: string, contractBranchId: string | null | undefined) {
+  if (!contractBranchId) return null;
+  const filial = await prisma.branch.findFirst({ where: { id: contractBranchId, organizationId } });
+  if (!filial) throw badRequest("Filial do contrato inválida.");
+  return filial.id;
+}
+
 employeesRouter.post("/", async (req, res, next) => {
   try {
     const { organizationId, id: userId } = req.user!;
@@ -167,15 +179,19 @@ employeesRouter.post("/", async (req, res, next) => {
 
     const branch = await prisma.branch.findFirst({ where: { id: data.branchId, organizationId } });
     if (!branch) throw badRequest("Filial inválida.");
+    const contractBranchId = await resolverFilialDoContrato(organizationId, data.contractBranchId);
 
+    // A matricula so colide dentro da mesma empresa do contrato: e ela que emite o numero.
     const [dupCpf, dupMatricula] = await Promise.all([
       prisma.employee.findFirst({ where: { organizationId, cpf: data.cpf } }),
-      prisma.employee.findFirst({ where: { organizationId, matricula: data.matricula } }),
+      prisma.employee.findFirst({ where: { organizationId, contractBranchId, matricula: data.matricula } }),
     ]);
     if (dupCpf) throw conflict("Já existe um colaborador com este CPF.");
-    if (dupMatricula) throw conflict("Já existe um colaborador com esta matrícula.");
+    if (dupMatricula) throw conflict("Já existe um colaborador com esta matrícula nesta empresa.");
 
-    const employee = await prisma.employee.create({ data: { ...data, email: data.email || null, organizationId } });
+    const employee = await prisma.employee.create({
+      data: { ...data, contractBranchId, email: data.email || null, organizationId },
+    });
     await writeAuditLog(prisma, { organizationId, userId, action: "CRIACAO", entityType: "Employee", entityId: employee.id, newData: data });
 
     res.status(201).json(employee);
@@ -197,15 +213,19 @@ employeesRouter.put("/:id", async (req, res, next) => {
 
     const branch = await prisma.branch.findFirst({ where: { id: data.branchId, organizationId } });
     if (!branch) throw badRequest("Filial inválida.");
+    const contractBranchId = await resolverFilialDoContrato(organizationId, data.contractBranchId);
 
     const [dupCpf, dupMatricula] = await Promise.all([
       prisma.employee.findFirst({ where: { organizationId, cpf: data.cpf, NOT: { id: existing.id } } }),
-      prisma.employee.findFirst({ where: { organizationId, matricula: data.matricula, NOT: { id: existing.id } } }),
+      prisma.employee.findFirst({ where: { organizationId, contractBranchId, matricula: data.matricula, NOT: { id: existing.id } } }),
     ]);
     if (dupCpf) throw conflict("Já existe um colaborador com este CPF.");
-    if (dupMatricula) throw conflict("Já existe um colaborador com esta matrícula.");
+    if (dupMatricula) throw conflict("Já existe um colaborador com esta matrícula nesta empresa.");
 
-    const employee = await prisma.employee.update({ where: { id: existing.id }, data: { ...data, email: data.email || null } });
+    const employee = await prisma.employee.update({
+      where: { id: existing.id },
+      data: { ...data, contractBranchId, email: data.email || null },
+    });
     await writeAuditLog(prisma, { organizationId, userId, action: "ALTERACAO", entityType: "Employee", entityId: employee.id, oldData: existing, newData: data });
 
     res.json(employee);

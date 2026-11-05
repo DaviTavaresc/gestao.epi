@@ -59,8 +59,12 @@ export type Employee = {
   nomeCompleto: string;
   cpf: string;
   matricula: string;
+  // Filial onde trabalha: define o estoque da entrega e o acesso do almoxarifado.
   branchId?: string | null;
   branch?: Branch | null;
+  // Filial cujo CNPJ consta no contrato de trabalho, quando diferente.
+  contractBranchId?: string | null;
+  contractBranch?: Branch | null;
   positionId?: string | null;
   departmentId?: string | null;
   position?: Position | null;
@@ -242,7 +246,7 @@ export type EmployeeCharge = {
     branch?: { id: string; nome: string } | null;
   };
   ppeItemId: string;
-  ppeItem: { id: string; nome: string; codigoInterno: string; ca: string };
+  ppeItem: { id: string; nome: string; codigoInterno: string; ca?: string | null };
   branch?: { id: string; nome: string } | null;
   deliveryItemId?: string | null;
   ppeReturnId?: string | null;

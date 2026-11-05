@@ -7,7 +7,11 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // No Supabase a aplicacao conecta pelo pooler (porta 6543), que nao aceita os
+  // comandos DDL das migracoes. A directUrl aponta para a conexao direta (5432) e
+  // e usada so por prisma migrate / db push. Em banco local as duas sao iguais.
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ========================= ENUMS =========================
@@ -206,14 +210,15 @@ model Branch {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users          User[]
-  employees      Employee[]
-  stocks         BranchStock[]
-  stockMovements StockMovement[]
-  purchases      Purchase[]
-  deliveries     Delivery[]
-  charges        EmployeeCharge[]
-  alerts         Alert[]
+  users             User[]
+  employees         Employee[]       @relation("EmployeeWorkBranch")
+  contractEmployees Employee[]       @relation("EmployeeContractBranch")
+  stocks            BranchStock[]
+  stockMovements    StockMovement[]
+  purchases         Purchase[]
+  deliveries        Delivery[]
+  charges           EmployeeCharge[]
+  alerts            Alert[]
 
   @@unique([organizationId, nome])
   @@index([organizationId, status])
@@ -348,8 +353,14 @@ model Employee {
   id               String         @id @default(cuid())
   organizationId   String
   organization     Organization   @relation(fields: [organizationId], references: [id])
+  // Filial onde o colaborador trabalha: define o estoque de onde sai a entrega
+  // e o escopo de acesso dos usuarios de almoxarifado.
   branchId         String?
-  branch           Branch?        @relation(fields: [branchId], references: [id])
+  branch           Branch?        @relation("EmployeeWorkBranch", fields: [branchId], references: [id])
+  // Filial cujo CNPJ consta no contrato de trabalho. Pode ser diferente da filial
+  // onde a pessoa trabalha, e e esse CNPJ que sai no termo de entrega.
+  contractBranchId String?
+  contractBranch   Branch?        @relation("EmployeeContractBranch", fields: [contractBranchId], references: [id])
   nomeCompleto     String
   cpf              String
   matricula        String
@@ -372,9 +383,15 @@ model Employee {
   charges                 EmployeeCharge[]
 
   @@unique([organizationId, cpf])
-  @@unique([organizationId, matricula])
+  // A matricula e o numero da folha de pagamento, emitido por cada empregador.
+  // A organizacao reune varios CNPJs, e a mesma matricula existe em mais de um deles
+  // apontando para pessoas diferentes, por isso a unicidade e por empresa do contrato.
+  // Quando contractBranchId e nulo o Postgres nao aplica o indice (NULL nao colide),
+  // entao a rota e o importador tambem conferem no grupo sem empresa definida.
+  @@unique([organizationId, contractBranchId, matricula])
   @@index([organizationId, status])
   @@index([organizationId, branchId])
+  @@index([organizationId, contractBranchId])
   @@map("employees")
 }
 

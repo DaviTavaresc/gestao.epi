@@ -62,6 +62,17 @@ export function ImportExcelModal({
       formData.append("file", file);
       const { data } = await api.post(`/imports/${type}/commit`, formData);
       toast.success(`${data.imported} registro(s) importado(s) com sucesso.`);
+      if (data.filialHerdada > 0) {
+        toast.info(
+          `${data.filialHerdada} colaborador(es) ficaram na filial da empresa do contrato, por não ter filial de trabalho informada.`
+        );
+      }
+      if (data.semFilial > 0) {
+        // Sem filial o estoque nao sabe de onde tirar o EPI, então a entrega fica travada.
+        toast.error(
+          `${data.semFilial} colaborador(es) entraram sem filial. Defina a filial de cada um antes de entregar EPI.`
+        );
+      }
       queryClient.invalidateQueries({ queryKey: [invalidateKey] });
       reset();
       onClose();

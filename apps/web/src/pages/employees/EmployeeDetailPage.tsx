@@ -78,7 +78,13 @@ export default function EmployeeDetailPage() {
             {employee.department?.nome ?? "Sem setor"}
           </p>
           {employee.branch && (
-            <p className="text-sm font-medium text-navy-700">Filial: {employee.branch.nome}</p>
+            <p className="text-sm font-medium text-navy-700">Trabalha em: {employee.branch.nome}</p>
+          )}
+          {employee.contractBranch && employee.contractBranch.id !== employee.branchId && (
+            <p className="text-sm text-slate-600">
+              Contratado por: <strong>{employee.contractBranch.nome}</strong>
+              {employee.contractBranch.cnpj ? ` — CNPJ ${employee.contractBranch.cnpj}` : ""}
+            </p>
           )}
         </div>
         <div className="flex items-center gap-2">

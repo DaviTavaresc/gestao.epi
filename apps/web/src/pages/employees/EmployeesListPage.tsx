@@ -25,6 +25,7 @@ type FormData = {
   cpf: string;
   matricula: string;
   branchId: string;
+  contractBranchId?: string;
   positionId?: string;
   departmentId?: string;
   dataAdmissao: string;
@@ -65,7 +66,12 @@ export default function EmployeesListPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (values: FormData) => {
-      const payload = { ...values, positionId: values.positionId || null, departmentId: values.departmentId || null };
+      const payload = {
+        ...values,
+        positionId: values.positionId || null,
+        departmentId: values.departmentId || null,
+        contractBranchId: values.contractBranchId || null,
+      };
       return editing ? api.put(`/employees/${editing.id}`, payload) : api.post("/employees", payload);
     },
     onSuccess: () => {
@@ -84,6 +90,7 @@ export default function EmployeesListPage() {
       matricula: "",
       // Com uma única filial acessível, já vem preenchida.
       branchId: branches?.length === 1 ? branches[0].id : "",
+      contractBranchId: "",
       dataAdmissao: "",
       email: "",
       telefone: "",
@@ -98,6 +105,7 @@ export default function EmployeesListPage() {
       cpf: employee.cpf,
       matricula: employee.matricula,
       branchId: employee.branchId ?? "",
+      contractBranchId: employee.contractBranchId ?? "",
       positionId: employee.positionId ?? "",
       departmentId: employee.departmentId ?? "",
       dataAdmissao: employee.dataAdmissao.slice(0, 10),
@@ -204,7 +212,7 @@ export default function EmployeesListPage() {
           <Input label="Matrícula" required error={formState.errors.matricula?.message} {...register("matricula", { required: "Obrigatório." })} />
           <div className="sm:col-span-2">
             <Select
-              label="Filial"
+              label="Filial onde trabalha"
               required
               hint="Define de qual estoque os EPIs deste colaborador serão retirados"
               error={formState.errors.branchId?.message}
@@ -214,6 +222,21 @@ export default function EmployeesListPage() {
               {branches?.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.nome}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="sm:col-span-2">
+            <Select
+              label="Filial do contrato (CNPJ do empregador)"
+              hint="Use quando o contrato for de outra filial — ex.: trabalha em Manaus, contratado pela filial de Rondônia. Em branco, vale a filial onde trabalha."
+              {...register("contractBranchId")}
+            >
+              <option value="">Mesma filial onde trabalha</option>
+              {branches?.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.nome}
+                  {b.cnpj ? ` — CNPJ ${b.cnpj}` : " — (sem CNPJ cadastrado)"}
                 </option>
               ))}
             </Select>
@@ -241,7 +264,7 @@ export default function EmployeesListPage() {
         onClose={() => setImportOpen(false)}
         type="employees"
         invalidateKey="employees"
-        columnsHint="nomeCompleto, cpf, matricula, filial, cargo, setor, dataAdmissao, email, telefone"
+        columnsHint="nomeCompleto, cpf, matricula, filial, filialContrato, cargo, setor, dataAdmissao, email, telefone — filialContrato aceita o nome da filial ou o CNPJ dela, e pode ficar em branco quando o contrato é da própria filial onde trabalha"
       />
     </div>
   );
