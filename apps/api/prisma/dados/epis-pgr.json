@@ -1,0 +1,353 @@
+{
+  "_sobre": "Catalogo de EPI e matriz Cargo x EPI extraidos dos PGRs entregues pelo RH em 05/11/2026. Fonte: 7 PGRs (4 da MedSafe, que trazem o CA; 3 da Cia-Med, que trazem apenas o tipo de EPI). O campo vidaUtilDias NAO consta em nenhum PGR: os valores abaixo sao proposta a validar com o tecnico de seguranca.",
+  "fontes": [
+    {
+      "arquivo": "PGR 082026 a 082027.pdf",
+      "empresa": "Dhb Comercio Ltda (Pneus Smile)",
+      "cnpj": "50.979.119/0001-26",
+      "elaborador": "MedSafe",
+      "grauRisco": 2,
+      "trazCa": true,
+      "vigencia": "03/10/2026 a 18/09/2027"
+    },
+    {
+      "arquivo": "PGR - DHP 08-2026 a 08-2027.pdf",
+      "empresa": "Dhp Servicos Alinhamento Ltda",
+      "cnpj": "51.154.445/0001-67",
+      "elaborador": "MedSafe",
+      "grauRisco": 3,
+      "trazCa": true,
+      "vigencia": "15/08/2026 a 15/08/2027"
+    },
+    {
+      "arquivo": "PGR PNEU EXPRESS 092026 a 092027.pdf",
+      "empresa": "Pneu 1 Companhia De Varejo Ltda (Pneu Express)",
+      "cnpj": "57.071.125/0001-20",
+      "elaborador": "MedSafe",
+      "grauRisco": 2,
+      "trazCa": true,
+      "vigencia": "05/10/2026 a 18/09/2027"
+    },
+    {
+      "arquivo": "PGR - PNEU EXPRESS.pdf",
+      "empresa": "Rondonia Pneu Express Ltda",
+      "cnpj": "61.951.958/0001-52",
+      "elaborador": "MedSafe",
+      "grauRisco": 2,
+      "trazCa": true,
+      "vigencia": "10/11/2025 a 10/10/2026",
+      "alerta": "VENCIDO"
+    },
+    {
+      "arquivo": "PGR- PNEU FORTE PARA - 05-2026 - 05-2028.pdf",
+      "empresa": "PNEU FORTE LTDA (filial Para)",
+      "cnpj": "07.532.752/0007-38",
+      "elaborador": "Cia-Med",
+      "grauRisco": 2,
+      "trazCa": false,
+      "vigencia": "05/2026 a 05/2028"
+    },
+    {
+      "arquivo": "PGR PNEU FORTE 2025-2027 rev.02.pdf",
+      "empresa": "PNEU FORTE LTDA (matriz Manaus)",
+      "cnpj": "07.532.752/0001-42",
+      "elaborador": "Cia-Med",
+      "grauRisco": 2,
+      "trazCa": false,
+      "vigencia": "01/2025 a 01/2027"
+    },
+    {
+      "arquivo": "PGR- P FORTE 2025-2027 rev.02.pdf",
+      "empresa": "P FORTE SERVICO DE ALINHAMENTO E BALANCEAMENTO LTDA",
+      "cnpj": "08.745.928/0001-07",
+      "elaborador": "Cia-Med",
+      "grauRisco": 3,
+      "trazCa": false,
+      "vigencia": "01/2025 a 01/2027"
+    }
+  ],
+  "catalogo": [
+    {
+      "codigoInterno": "EPI-001",
+      "nome": "Calcado de seguranca tipo botina com biqueira de composite",
+      "categoria": "Protecao dos membros inferiores",
+      "ca": "18051",
+      "exigeCa": true,
+      "unidade": "PAR",
+      "vidaUtilDiasProposta": 365
+    },
+    {
+      "codigoInterno": "EPI-002",
+      "nome": "Luva de protecao pigmentada",
+      "categoria": "Protecao dos membros superiores",
+      "ca": "32074",
+      "exigeCa": true,
+      "unidade": "PAR",
+      "vidaUtilDiasProposta": 30
+    },
+    {
+      "codigoInterno": "EPI-003",
+      "nome": "Bota de PVC impermeavel",
+      "categoria": "Protecao dos membros inferiores",
+      "ca": "42291",
+      "exigeCa": true,
+      "unidade": "PAR",
+      "vidaUtilDiasProposta": 365
+    },
+    {
+      "codigoInterno": "EPI-004",
+      "nome": "Oculos de protecao dos olhos e face",
+      "categoria": "Protecao dos olhos e face",
+      "ca": "9722",
+      "exigeCa": true,
+      "unidade": "UN",
+      "vidaUtilDiasProposta": 365
+    },
+    {
+      "codigoInterno": "EPI-005",
+      "nome": "Luva de latex",
+      "categoria": "Protecao dos membros superiores",
+      "ca": "39564",
+      "exigeCa": true,
+      "unidade": "PAR",
+      "vidaUtilDiasProposta": 30
+    },
+    {
+      "codigoInterno": "EPI-006",
+      "nome": "Oculos de seguranca ampla visao",
+      "categoria": "Protecao dos olhos e face",
+      "ca": "37640",
+      "exigeCa": true,
+      "unidade": "UN",
+      "vidaUtilDiasProposta": 365
+    },
+    {
+      "codigoInterno": "EPI-007",
+      "nome": "Luva para protecao de agentes mecanicos 4542D",
+      "categoria": "Protecao dos membros superiores",
+      "ca": "36606",
+      "exigeCa": true,
+      "unidade": "PAR",
+      "vidaUtilDiasProposta": 60
+    },
+    {
+      "codigoInterno": "EPI-008",
+      "nome": "Oculos de seguranca com vedacao total",
+      "categoria": "Protecao dos olhos e face",
+      "ca": "25716",
+      "exigeCa": true,
+      "unidade": "UN",
+      "vidaUtilDiasProposta": 365
+    },
+    {
+      "codigoInterno": "EPI-009",
+      "nome": "Protetor auditivo tipo plug de insercao",
+      "categoria": "Protecao auditiva",
+      "ca": "10551",
+      "exigeCa": true,
+      "unidade": "PAR",
+      "vidaUtilDiasProposta": 180
+    },
+    {
+      "codigoInterno": "EPI-010",
+      "nome": "Luva emborrachada nitrilica",
+      "categoria": "Protecao dos membros superiores",
+      "ca": "32038",
+      "exigeCa": true,
+      "unidade": "PAR",
+      "vidaUtilDiasProposta": 30
+    },
+    {
+      "codigoInterno": "EPI-011",
+      "nome": "Creme protetor de seguranca",
+      "categoria": "Protecao da pele",
+      "ca": "4114",
+      "exigeCa": true,
+      "unidade": "UN",
+      "vidaUtilDiasProposta": 30
+    },
+    {
+      "codigoInterno": "EPI-012",
+      "nome": "Bone com casquete interno",
+      "categoria": "Protecao da cabeca",
+      "ca": null,
+      "exigeCa": false,
+      "unidade": "UN",
+      "vidaUtilDiasProposta": 365,
+      "observacao": "Os PGRs tratam como protecao ADICIONAL OPCIONAL: 'nao se trata de EPI obrigatorio por norma'. Fica no catalogo, fora dos kits obrigatorios."
+    },
+    {
+      "codigoInterno": "EPI-013",
+      "nome": "Cinto lombar",
+      "categoria": "Protecao do tronco",
+      "ca": null,
+      "exigeCa": false,
+      "unidade": "UN",
+      "vidaUtilDiasProposta": 365,
+      "observacao": "Os PGRs condicionam a 'avaliacao tecnica individual'. Fica no catalogo, fora dos kits obrigatorios."
+    }
+  ],
+  "kits": [
+    {
+      "nome": "Kit Oficina - Executor Mecanico",
+      "itens": [
+        "EPI-001",
+        "EPI-006",
+        "EPI-007",
+        "EPI-008",
+        "EPI-009",
+        "EPI-010",
+        "EPI-011"
+      ],
+      "fonte": "GES EXECUTOR MECANICO nos PGRs da Dhp Servicos, Pneu Express e Rondonia Pneu Express (os tres listam os 7 itens identicos)"
+    },
+    {
+      "nome": "Kit Estoque e Deposito",
+      "itens": [
+        "EPI-001",
+        "EPI-002"
+      ],
+      "fonte": "GES AUXILIAR DE DEPOSITO (Dhb), CONFERENTE JR (Dhp, Pneu Express) e ASSISTENTE DE PATIO (Rondonia)"
+    },
+    {
+      "nome": "Kit Limpeza e Apoio",
+      "itens": [
+        "EPI-003",
+        "EPI-004",
+        "EPI-005"
+      ],
+      "fonte": "GES AUXILIAR DE SERVICOS GERAIS (Dhp, Pneu Express, Rondonia)"
+    },
+    {
+      "nome": "Kit Circulacao em Oficina",
+      "itens": [
+        "EPI-001"
+      ],
+      "fonte": "GES CONSULTOR DE VENDAS e SUBGERENTE DE VENDAS (Dhb, Pneu Express, Rondonia) e CHEFE DE PATIO (Rondonia). Risco: queda de mesmo nivel e queda de materiais ao circular pela oficina."
+    }
+  ],
+  "cargosPorKit": {
+    "Kit Oficina - Executor Mecanico": [
+      "EXECUTOR MECANICO",
+      "EXECUTOR MECANICO TRAINEE",
+      "EXECUTOR CHEFE",
+      "ARTIFICE DE MANUTENCAO"
+    ],
+    "Kit Estoque e Deposito": [
+      "AUXILIAR DE DEPOSITO",
+      "AUXILIAR DE ESTOQUE",
+      "ESTOQUISTA",
+      "CONFERENTE",
+      "CONFERENTE JR",
+      "CONFERENTE PLENO",
+      "ASSISTENTE DE LOGISTICA"
+    ],
+    "Kit Limpeza e Apoio": [
+      "AUXILIAR DE SERVICOS GERAIS"
+    ],
+    "Kit Circulacao em Oficina": [
+      "CONSULTOR (A) DE VENDAS",
+      "CONSULTOR DE VENDAS SENIOR",
+      "VENDEDOR  ( A )",
+      "SUPERVISOR(A) DE VENDAS",
+      "SUPERVISOR DE VENDAS - PI",
+      "GERENTE DE VENDAS",
+      "GERENTE DE VENDAS JR.",
+      "GERENTE DE VENDAS PLENO",
+      "GERENTE DE VENDAS TRAINEE",
+      "Apoio de Vendas"
+    ]
+  },
+  "cargosSemEpiNoPgr": {
+    "_motivo": "O PGR avaliou estes cargos (ou o equivalente administrativo deles) com riscos Toleraveis e NAO abriu tabela de EPI. Entram no sistema sem exigencia.",
+    "cargos": [
+      "ANALISTA ADMINISTRATIVO SR",
+      "ANALISTA COMERCIAL",
+      "ANALISTA DE COMPRAS",
+      "ANALISTA DE DIRETORIA SR",
+      "ANALISTA DE MARKETING SR",
+      "ANALISTA DE RH JR",
+      "ANALISTA FINANCEIRO PL",
+      "ASSIST. DE FATURAMENTO JR",
+      "ASSIST.CONTABIL PLENO",
+      "ASSISTENTE ADMINISTRATIVO",
+      "ASSISTENTE ADMINISTRATIVO JR",
+      "ASSISTENTE DE RH",
+      "ASSISTENTE DE RH JR",
+      "ASSISTENTE FINANCEIRO JR",
+      "ASSISTENTE FINANCEIRO PL",
+      "ASSISTENTE FISCAL JR",
+      "AUX COMERCIAL",
+      "AUXILIAR ADMINISTRATIVO",
+      "AUXILIAR COMERCIAL",
+      "AUXILIAR DE ESCRITORIO",
+      "Auxiliar de Faturamento JR",
+      "Desenvolvedor de Sistema JR",
+      "DIRETOR DE PLANEJAMENTO",
+      "Especialista Senior em Inteligencia de Negocio BI",
+      "GERENTE DE RECURSOS HUMANOS",
+      "GERENTE DE T.I",
+      "GERENTE FINANCEIRO",
+      "MENOR APRENDIZ-ADMINISTRITIVO",
+      "OPERADOR  DE CAIXA",
+      "OPERADOR(A) DE CAIXA",
+      "SECRETARIA ADMINISTRATIVA",
+      "SUPERVISOR(A) ADM FINANCEIRO",
+      "TECNICO EM TI JR"
+    ]
+  },
+  "cargosSemCoberturaNoPgr": {
+    "_motivo": "Cargos que existem na folha de pagamento mas nao aparecem com tabela de EPI em nenhum dos 7 PGRs. Precisam de definicao do tecnico de seguranca antes de entrar na matriz.",
+    "cargos": [
+      {
+        "cargo": "MOTORISTA DE CAMINHAO TRUCK",
+        "pessoas": 2,
+        "nota": "O PGR da matriz Manaus avalia o cargo (risco de transito, severidade Moderada) e marca 'Bota de Seguranca' como aplicavel na matriz da Cia-Med, mas sem CA."
+      },
+      {
+        "cargo": "MOTORISTA DE CAMINHAO",
+        "pessoas": 1,
+        "nota": "Idem MOTORISTA DE CAMINHAO TRUCK."
+      },
+      {
+        "cargo": "MOTORISTA CAMINHÃO TOCO",
+        "pessoas": 1,
+        "nota": "Idem MOTORISTA DE CAMINHAO TRUCK."
+      },
+      {
+        "cargo": "GERENTE DE LOGISTICA",
+        "pessoas": 1,
+        "nota": "PGR da P Forte avalia como administrativo; matriz de EPI marca bota e luvas como aplicaveis, sem CA. Confirmar."
+      },
+      {
+        "cargo": "GERENTE DE LOGÍSTICA SR",
+        "pessoas": 1,
+        "nota": "Idem GERENTE DE LOGISTICA."
+      },
+      {
+        "cargo": "LIDER DE LOGISTICA JR",
+        "pessoas": 1,
+        "nota": "PGR da P Forte avalia LIDER OPER DE LOGISTICA; matriz de EPI marca bota e luvas, sem CA. Confirmar."
+      },
+      {
+        "cargo": "LIDER OPER DE LOGISTICA SR",
+        "pessoas": 1,
+        "nota": "Idem LIDER DE LOGISTICA JR."
+      },
+      {
+        "cargo": "Analista de Manutenção JR",
+        "pessoas": 1,
+        "nota": "Nome nao aparece em nenhum PGR. Se for oficina, equivale a ARTIFICE DE MANUTENCAO (Kit Oficina); se for escritorio, nao exige EPI. Definir com o tecnico."
+      }
+    ]
+  },
+  "lacunas": [
+    "vidaUtilDias: nenhum dos 7 PGRs informa prazo de troca. Os valores em vidaUtilDiasProposta sao sugestao e precisam do aval do tecnico de seguranca antes de virarem regra de vencimento no sistema.",
+    "caValidade: os PGRs trazem o numero do CA, nunca a data de validade. Consultar no portal do MTE antes de cadastrar, porque o sistema bloqueia entrega de EPI com CA vencido.",
+    "RONDONIA PNEU FORTE LTDA (11 pessoas na folha) nao tem PGR entre os 7 arquivos entregues.",
+    "O PGR da Rondonia Pneu Express venceu em 10/10/2026 e precisa de revisao.",
+    "A folha do RH traz 'DHB PNEUS LTDA'; o PGR traz 'Dhb Comercio Ltda (Pneus Smile)', CNPJ 50.979.119/0001-26. Confirmar se e a mesma empresa antes de gravar o CNPJ na filial.",
+    "Fabricante e modelo de cada EPI nao constam nos PGRs; preencher no momento da compra.",
+    "'Apoio de Vendas' nao aparece literalmente nos PGRs; foi incluido no Kit Circulacao em Oficina por ser do mesmo setor comercial que CONSULTOR DE VENDAS, que o PGR cobre com botina. Confirmar."
+  ]
+}
