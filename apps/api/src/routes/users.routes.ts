@@ -8,7 +8,13 @@ import { hashPassword } from "../utils/password";
 import { writeAuditLog } from "../utils/audit";
 
 export const usersRouter = Router();
-usersRouter.use(requireAuth, requireRole("ADMIN"));
+// O RH enxerga a lista de acessos e cadastra gente nova: é ele quem recebe o
+// pedido quando alguém entra na empresa. Mexer em acesso que já existe — trocar
+// perfil, redefinir senha, inativar, excluir — continua só com o administrador,
+// por isso cada uma dessas rotas repete a trava abaixo.
+usersRouter.use(requireAuth, requireRole("ADMIN", "RH"));
+
+const somenteAdmin = requireRole("ADMIN");
 
 usersRouter.get("/", async (req, res, next) => {
   try {
@@ -60,6 +66,13 @@ usersRouter.post("/", async (req, res, next) => {
 
     exigirFilialDoGerente(data.role, data.branchId);
 
+    // Só um administrador cria outro administrador. Sem esta trava o RH criaria
+    // um acesso ADMIN e entraria com ele, ganhando por um desvio o poder que a
+    // tela de edição lhe nega.
+    if (data.role === "ADMIN" && req.user!.role !== "ADMIN") {
+      throw forbidden("Apenas o administrador pode criar outro administrador. Escolha outro perfil ou peça a ele.");
+    }
+
     const existing = await prisma.user.findUnique({ where: { email: data.email } });
     if (existing) throw conflict("Este e-mail já está cadastrado.");
 
@@ -101,7 +114,7 @@ const updateSchema = z.object({
   branchId: z.string().optional().nullable(),
 });
 
-usersRouter.put("/:id", async (req, res, next) => {
+usersRouter.put("/:id", somenteAdmin, async (req, res, next) => {
   try {
     const { organizationId, id: actingUserId } = req.user!;
     const data = updateSchema.parse(req.body);
@@ -143,7 +156,7 @@ usersRouter.put("/:id", async (req, res, next) => {
   }
 });
 
-usersRouter.patch("/:id/status", async (req, res, next) => {
+usersRouter.patch("/:id/status", somenteAdmin, async (req, res, next) => {
   try {
     const { organizationId, id: actingUserId } = req.user!;
     const { status } = z.object({ status: z.enum(["ATIVO", "INATIVO"]) }).parse(req.body);
@@ -177,7 +190,7 @@ usersRouter.patch("/:id/status", async (req, res, next) => {
 
 const resetPasswordByAdminSchema = z.object({ newPassword: z.string().min(8) });
 
-usersRouter.post("/:id/reset-password", async (req, res, next) => {
+usersRouter.post("/:id/reset-password", somenteAdmin, async (req, res, next) => {
   try {
     const { organizationId, id: actingUserId } = req.user!;
     const { newPassword } = resetPasswordByAdminSchema.parse(req.body);
@@ -198,14 +211,14 @@ usersRouter.post("/:id/reset-password", async (req, res, next) => {
   }
 });
 
-// Exclui um acesso de vez. Só o ADMIN chega aqui (requireRole no topo do router).
+// Exclui um acesso de vez. Só o ADMIN chega aqui (somenteAdmin nesta rota).
 //
 // Um usuário que já operou fica amarrado ao histórico: ele assina a entrega como
 // responsável, aparece na movimentação de estoque e na auditoria. Apagar a linha
 // dele arrancaria o nome de documentos que precisam dizer quem fez o quê — e a
 // entrega de EPI é prova legal. Nesse caso a exclusão é recusada e o caminho é
 // inativar, que tira o acesso e preserva o histórico.
-usersRouter.delete("/:id", async (req, res, next) => {
+usersRouter.delete("/:id", somenteAdmin, async (req, res, next) => {
   try {
     const { organizationId, id: actingUserId } = req.user!;
 

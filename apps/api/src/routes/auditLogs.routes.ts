@@ -5,7 +5,9 @@ import { requireRole } from "../middleware/rbac";
 import { parsePagination, toSkipTake, buildPageResult } from "../utils/pagination";
 
 export const auditLogsRouter = Router();
-auditLogsRouter.use(requireAuth, requireRole("ADMIN"));
+// Leitura apenas: a auditoria não tem rota de escrita, o registro é gravado
+// pelas próprias operações. O RH acompanha quem fez o quê junto do administrador.
+auditLogsRouter.use(requireAuth, requireRole("ADMIN", "RH"));
 
 auditLogsRouter.get("/", async (req, res, next) => {
   try {

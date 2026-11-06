@@ -6,7 +6,7 @@ import { usePermissions } from "../../hooks/usePermissions";
 import { useAuthStore } from "../../stores/authStore";
 
 export function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => void }) {
-  const { isAdmin } = usePermissions();
+  const { role } = usePermissions();
   const organization = useAuthStore((s) => s.organization);
 
   return (
@@ -22,7 +22,7 @@ export function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose:
           <div className="flex items-center gap-2">
             <ShieldHalf className="h-6 w-6 text-navy-300" />
             <div>
-              <p className="text-sm font-semibold text-white">Gestão de EPI</p>
+              <p className="text-sm font-semibold leading-tight text-white">Gestão de EPI e Uniformes</p>
               <p className="truncate text-xs text-navy-300">{organization?.nomeFantasia || organization?.razaoSocial}</p>
             </div>
           </div>
@@ -32,8 +32,14 @@ export function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose:
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
+          {/* O grupo desaparece quando nenhum item dele cabe no perfil: o RH vê
+              "Administração" com Usuários e Auditoria, sem Configurações. */}
           {navGroups
-            .filter((g) => !g.adminOnly || isAdmin)
+            .map((group) => ({
+              ...group,
+              items: group.items.filter((item) => !item.roles || role === "ADMIN" || (role && item.roles.includes(role))),
+            }))
+            .filter((group) => group.items.length > 0)
             .map((group) => (
               <div key={group.title || "root"} className="mb-4">
                 {group.title && (

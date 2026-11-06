@@ -15,11 +15,17 @@ import { InlineBanner } from "../../components/ui/Feedback";
 import { roleLabel, Role } from "../../stores/authStore";
 import { toast } from "../../stores/toastStore";
 import { useBranches } from "../../hooks/useBranches";
+import { usePermissions } from "../../hooks/usePermissions";
 
 type CreateFormData = { name: string; email: string; password: string; role: Role; branchId?: string };
 type EditFormData = { name: string; role: Role; branchId?: string };
 
 export default function UsersPage() {
+  // O RH entra nesta tela para ver os acessos e cadastrar gente nova. Alterar
+  // perfil, redefinir senha, inativar e excluir são do administrador, e a API
+  // recusa essas chamadas vindas do RH: esconder os botões evita o 403 na cara
+  // de quem não tem o que fazer com eles.
+  const { isAdmin } = usePermissions();
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<OrgUser | null>(null);
   const [toggling, setToggling] = useState<OrgUser | null>(null);
@@ -92,7 +98,11 @@ export default function UsersPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-slate-800">Usuários</h1>
-          <p className="text-sm text-slate-500">Gerencie os usuários e perfis de acesso da empresa.</p>
+          <p className="text-sm text-slate-500">
+            {isAdmin
+              ? "Gerencie os usuários e perfis de acesso da empresa."
+              : "Veja os acessos da empresa e cadastre novos usuários. Alterar ou excluir um acesso existente é do administrador."}
+          </p>
         </div>
         <Button onClick={() => { createForm.reset({ name: "", email: "", password: "", role: "CONSULTA", branchId: "" }); setCreateOpen(true); }}>
           <Plus className="h-4 w-4" /> Novo usuário
@@ -112,18 +122,22 @@ export default function UsersPage() {
             },
             { header: "Status", cell: (u) => <StatusBadge status={u.status} /> },
             { header: "Último login", cell: (u) => (u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString("pt-BR") : "Nunca") },
-            {
-              header: "",
-              cell: (u) => (
-                <div className="flex justify-end gap-1">
-                  <Button title="Editar usuário" variant="ghost" size="sm" onClick={() => { editForm.reset({ name: u.name, role: u.role, branchId: u.branchId ?? "" }); setEditing(u); }}><Pencil className="h-4 w-4" /></Button>
-                  <Button title="Redefinir senha" variant="ghost" size="sm" onClick={() => setResettingPw(u)}><KeyRound className="h-4 w-4" /></Button>
-                  <Button title="Ativar ou inativar usuário" variant="ghost" size="sm" onClick={() => setToggling(u)}><Power className="h-4 w-4" /></Button>
-                  <Button title="Excluir acesso" variant="ghost" size="sm" onClick={() => setDeleting(u)}><Trash2 className="h-4 w-4 text-red-600" /></Button>
-                </div>
-              ),
-              className: "text-right",
-            },
+            ...(isAdmin
+              ? [
+                  {
+                    header: "",
+                    cell: (u: OrgUser) => (
+                      <div className="flex justify-end gap-1">
+                        <Button title="Editar usuário" variant="ghost" size="sm" onClick={() => { editForm.reset({ name: u.name, role: u.role, branchId: u.branchId ?? "" }); setEditing(u); }}><Pencil className="h-4 w-4" /></Button>
+                        <Button title="Redefinir senha" variant="ghost" size="sm" onClick={() => setResettingPw(u)}><KeyRound className="h-4 w-4" /></Button>
+                        <Button title="Ativar ou inativar usuário" variant="ghost" size="sm" onClick={() => setToggling(u)}><Power className="h-4 w-4" /></Button>
+                        <Button title="Excluir acesso" variant="ghost" size="sm" onClick={() => setDeleting(u)}><Trash2 className="h-4 w-4 text-red-600" /></Button>
+                      </div>
+                    ),
+                    className: "text-right",
+                  },
+                ]
+              : []),
           ]}
           rows={data ?? []}
           loading={isLoading}
@@ -147,8 +161,9 @@ export default function UsersPage() {
           <Input label="E-mail" type="email" required {...createForm.register("email", { required: true })} />
           <Input label="Senha provisória" type="password" required hint="Mínimo de 8 caracteres" {...createForm.register("password", { required: true, minLength: 8 })} />
           <Select label="Perfil de acesso" required {...createForm.register("role", { required: true })}>
-            <option value="ADMIN">Administrador — acesso total, inclusive a esta tela</option>
-            <option value="RH">RH — cadastros e operação, no grupo inteiro</option>
+            {/* Só o administrador cria outro administrador; a API também recusa. */}
+            {isAdmin && <option value="ADMIN">Administrador — acesso total, inclusive a esta tela</option>}
+            <option value="RH">RH — cadastros, acessos e auditoria, no grupo inteiro</option>
             <option value="GERENTE">Gerente — operação apenas da filial dele</option>
             <option value="DIRETORIA">Diretoria — só leitura, vê o grupo inteiro</option>
             <option value="CONSULTA">Consulta — só leitura</option>
@@ -182,7 +197,7 @@ export default function UsersPage() {
           <Input label="Nome completo" required {...editForm.register("name", { required: true })} />
           <Select label="Perfil de acesso" required {...editForm.register("role", { required: true })}>
             <option value="ADMIN">Administrador — acesso total, inclusive a esta tela</option>
-            <option value="RH">RH — cadastros e operação, no grupo inteiro</option>
+            <option value="RH">RH — cadastros, acessos e auditoria, no grupo inteiro</option>
             <option value="GERENTE">Gerente — operação apenas da filial dele</option>
             <option value="DIRETORIA">Diretoria — só leitura, vê o grupo inteiro</option>
             <option value="CONSULTA">Consulta — só leitura</option>

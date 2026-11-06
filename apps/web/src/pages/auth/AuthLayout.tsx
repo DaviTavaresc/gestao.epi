@@ -9,7 +9,7 @@ export function AuthLayout({ title, subtitle, children }: { title: string; subti
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-navy-700">
             <ShieldHalf className="h-6 w-6 text-white" />
           </div>
-          <h1 className="text-xl font-semibold text-white">Sistema de Gestão de EPI</h1>
+          <h1 className="text-xl font-semibold text-white">Sistema de Gestão de EPI e Uniformes</h1>
           {subtitle && <p className="text-sm text-navy-300">{subtitle}</p>}
         </div>
         <div className="rounded-2xl bg-white p-6 shadow-xl">

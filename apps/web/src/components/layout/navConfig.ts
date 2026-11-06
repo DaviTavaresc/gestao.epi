@@ -25,9 +25,12 @@ import {
   Settings,
   LucideIcon,
 } from "lucide-react";
+import { Role } from "../../stores/authStore";
 
-export type NavItem = { label: string; to: string; icon: LucideIcon };
-export type NavGroup = { title: string; items: NavItem[]; adminOnly?: boolean };
+// roles ausente = item visível para qualquer perfil autenticado. O ADMIN enxerga
+// tudo, sempre: a lista só restringe quem mais entra.
+export type NavItem = { label: string; to: string; icon: LucideIcon; roles?: Role[] };
+export type NavGroup = { title: string; items: NavItem[] };
 
 export const navGroups: NavGroup[] = [
   {
@@ -91,11 +94,12 @@ export const navGroups: NavGroup[] = [
   },
   {
     title: "Administração",
-    adminOnly: true,
     items: [
-      { label: "Usuários", to: "/admin/usuarios", icon: ShieldCheck },
-      { label: "Auditoria", to: "/admin/auditoria", icon: History },
-      { label: "Configurações", to: "/admin/configuracoes", icon: Settings },
+      // O RH cadastra acessos e acompanha a auditoria. Alterar ou excluir um
+      // acesso que já existe, e as configurações da empresa, ficam com o ADMIN.
+      { label: "Usuários", to: "/admin/usuarios", icon: ShieldCheck, roles: ["ADMIN", "RH"] },
+      { label: "Auditoria", to: "/admin/auditoria", icon: History, roles: ["ADMIN", "RH"] },
+      { label: "Configurações", to: "/admin/configuracoes", icon: Settings, roles: ["ADMIN"] },
     ],
   },
 ];

@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
 import { api } from "./lib/api";
 import { useAuthStore } from "./stores/authStore";
-import { ProtectedRoute, AdminRoute } from "./routes/ProtectedRoute";
+import { ProtectedRoute, AdminRoute, RoleRoute } from "./routes/ProtectedRoute";
 import { AppLayout } from "./components/layout/AppLayout";
 import { ToastHost } from "./components/ui/ToastHost";
 
@@ -111,9 +111,12 @@ export default function App() {
             <Route path="/relatorios" element={<ReportsPage />} />
             <Route path="/relatorios/custos" element={<CostsPage />} />
 
-            <Route element={<AdminRoute />}>
+            <Route element={<RoleRoute roles={["RH"]} />}>
               <Route path="/admin/usuarios" element={<UsersPage />} />
               <Route path="/admin/auditoria" element={<AuditLogsPage />} />
+            </Route>
+
+            <Route element={<AdminRoute />}>
               <Route path="/admin/configuracoes" element={<SettingsPage />} />
             </Route>
           </Route>
