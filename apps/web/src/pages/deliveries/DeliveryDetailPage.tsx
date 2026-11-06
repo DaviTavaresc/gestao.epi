@@ -22,7 +22,7 @@ export default function DeliveryDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { canWrite, isAdmin } = usePermissions();
-  const canEdit = canWrite(["ALMOXARIFADO", "SEGURANCA_TRABALHO"]);
+  const canEdit = canWrite(["RH", "GERENTE"]);
 
   const [nomeDigitado, setNomeDigitado] = useState("");
   const [concordo, setConcordo] = useState(false);

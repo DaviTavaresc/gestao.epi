@@ -8,7 +8,7 @@ import { armazenamento, nomeUnico } from "../utils/storage";
 import { writeAuditLog } from "../utils/audit";
 
 export const documentsRouter = Router();
-documentsRouter.use(requireAuth, requireWriteRole("ALMOXARIFADO"));
+documentsRouter.use(requireAuth, requireWriteRole("RH", "GERENTE"));
 
 documentsRouter.post("/purchases/:purchaseId", uploadDocument.single("file"), async (req, res, next) => {
   try {

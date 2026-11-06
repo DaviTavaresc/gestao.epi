@@ -40,7 +40,7 @@ type FormData = {
 
 export default function PpeItemsPage() {
   const { canWrite } = usePermissions();
-  const canEdit = canWrite(["SEGURANCA_TRABALHO", "ALMOXARIFADO"]);
+  const canEdit = canWrite(["RH"]);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);

@@ -21,7 +21,7 @@ type FormData = { nome: string; descricao?: string };
 
 export default function PositionsPage() {
   const { canWrite } = usePermissions();
-  const canEdit = canWrite(["SEGURANCA_TRABALHO"]);
+  const canEdit = canWrite(["RH"]);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);

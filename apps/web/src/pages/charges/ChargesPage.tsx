@@ -58,7 +58,7 @@ const moeda = (valor: string | number) =>
 
 export default function ChargesPage() {
   const { canWrite, isAdmin } = usePermissions();
-  const canEdit = canWrite(["ALMOXARIFADO"]);
+  const canEdit = canWrite(["RH", "GERENTE"]);
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("");
   const [branchId, setBranchId] = useState("");

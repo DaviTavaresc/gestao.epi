@@ -6,7 +6,7 @@ import { prisma } from "../prisma";
 export type AuthenticatedUser = {
   id: string;
   organizationId: string;
-  role: "ADMIN" | "ALMOXARIFADO" | "SEGURANCA_TRABALHO" | "CONSULTA";
+  role: "ADMIN" | "RH" | "GERENTE" | "DIRETORIA" | "CONSULTA";
   // Filial do usuário. Nulo = acesso a todas as filiais da organização.
   branchId: string | null;
 };

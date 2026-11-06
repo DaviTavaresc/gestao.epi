@@ -17,7 +17,7 @@ import { applyStockMovement } from "../utils/stock";
 import { assertBranchAllowed, resolveBranchFilter } from "../utils/branchScope";
 
 export const deliveriesRouter = Router();
-deliveriesRouter.use(requireAuth, requireWriteRole("ALMOXARIFADO", "SEGURANCA_TRABALHO"));
+deliveriesRouter.use(requireAuth, requireWriteRole("RH", "GERENTE"));
 
 async function getThresholds(organizationId: string) {
   const org = await prisma.organization.findUnique({ where: { id: organizationId } });

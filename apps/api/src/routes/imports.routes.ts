@@ -8,7 +8,7 @@ import { parseWorkbookRows } from "../utils/excelImport";
 import { writeAuditLog } from "../utils/audit";
 
 export const importsRouter = Router();
-importsRouter.use(requireAuth, requireWriteRole("SEGURANCA_TRABALHO"));
+importsRouter.use(requireAuth, requireWriteRole("RH"));
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 

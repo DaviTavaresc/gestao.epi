@@ -40,7 +40,7 @@ const statusDotClass: Record<string, string> = {
 
 export default function CalendarPage() {
   const { canWrite } = usePermissions();
-  const canDeliver = canWrite(["ALMOXARIFADO"]);
+  const canDeliver = canWrite(["RH", "GERENTE"]);
   const navigate = useNavigate();
   const [cursor, setCursor] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);

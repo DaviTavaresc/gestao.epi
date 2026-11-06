@@ -16,10 +16,18 @@ datasource db {
 
 // ========================= ENUMS =========================
 
+// Perfis de acesso. Só o ADMIN administra usuários, filiais, configurações e auditoria.
+//   ADMIN     tudo, inclusive criar, editar e excluir acessos
+//   RH        cadastro (colaboradores, cargos, setores, EPIs, kits, matriz) e operação
+//             (entregas, devoluções, trocas, estoque, compras), no grupo inteiro
+//   GERENTE   operação da própria filial: entrega EPI e movimenta o estoque da unidade
+//   DIRETORIA leitura de tudo, sempre no grupo inteiro, sem escrever
+//   CONSULTA  leitura, respeitando a filial a que o usuário estiver vinculado
 enum UserRole {
   ADMIN
-  ALMOXARIFADO
-  SEGURANCA_TRABALHO
+  RH
+  GERENTE
+  DIRETORIA
   CONSULTA
 }
 

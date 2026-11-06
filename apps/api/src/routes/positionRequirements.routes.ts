@@ -8,7 +8,7 @@ import { writeAuditLog } from "../utils/audit";
 
 // Matriz Cargo x EPI — define quais EPIs são obrigatórios para cada cargo.
 export const positionRequirementsRouter = Router();
-positionRequirementsRouter.use(requireAuth, requireWriteRole("SEGURANCA_TRABALHO"));
+positionRequirementsRouter.use(requireAuth, requireWriteRole("RH"));
 
 positionRequirementsRouter.get("/", async (req, res, next) => {
   try {

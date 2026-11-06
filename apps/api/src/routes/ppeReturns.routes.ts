@@ -13,7 +13,7 @@ import { custoUnitarioDeReferencia, estadoGeraCobranca } from "../utils/charges"
 import { booleanDoFormulario } from "../utils/zodHelpers";
 
 export const ppeReturnsRouter = Router();
-ppeReturnsRouter.use(requireAuth, requireWriteRole("ALMOXARIFADO"));
+ppeReturnsRouter.use(requireAuth, requireWriteRole("RH", "GERENTE"));
 
 ppeReturnsRouter.get("/", async (req, res, next) => {
   try {

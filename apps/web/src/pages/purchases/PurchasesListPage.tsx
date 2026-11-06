@@ -30,7 +30,7 @@ type FormData = {
 
 export default function PurchasesListPage() {
   const { canWrite } = usePermissions();
-  const canEdit = canWrite(["ALMOXARIFADO"]);
+  const canEdit = canWrite(["RH", "GERENTE"]);
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [branchId, setBranchId] = useState("");

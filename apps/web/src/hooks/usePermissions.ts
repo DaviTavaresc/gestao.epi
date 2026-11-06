@@ -6,7 +6,8 @@ export function usePermissions() {
   function canWrite(allowedRoles: Role[]): boolean {
     if (!role) return false;
     if (role === "ADMIN") return true;
-    if (role === "CONSULTA") return false;
+    // Diretoria e consulta acompanham, mas nao escrevem em nenhum modulo.
+    if (role === "DIRETORIA" || role === "CONSULTA") return false;
     return allowedRoles.includes(role);
   }
 

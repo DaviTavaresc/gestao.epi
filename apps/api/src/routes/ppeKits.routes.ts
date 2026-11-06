@@ -7,7 +7,7 @@ import { badRequest, notFound } from "../utils/httpError";
 import { writeAuditLog } from "../utils/audit";
 
 export const ppeKitsRouter = Router();
-ppeKitsRouter.use(requireAuth, requireWriteRole("SEGURANCA_TRABALHO"));
+ppeKitsRouter.use(requireAuth, requireWriteRole("RH"));
 
 const kitItemSchema = z.object({ ppeItemId: z.string().min(1), quantidade: z.coerce.number().int().positive() });
 const upsertSchema = z.object({

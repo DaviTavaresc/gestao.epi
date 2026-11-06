@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type Role = "ADMIN" | "ALMOXARIFADO" | "SEGURANCA_TRABALHO" | "CONSULTA";
+export type Role = "ADMIN" | "RH" | "GERENTE" | "DIRETORIA" | "CONSULTA";
 
 export type AuthUser = { id: string; name: string; email: string; role: Role };
 export type AuthOrganization = { id: string; razaoSocial: string; nomeFantasia?: string | null; logoUrl?: string | null };
@@ -32,10 +32,12 @@ export function roleLabel(role: Role): string {
   switch (role) {
     case "ADMIN":
       return "Administrador";
-    case "ALMOXARIFADO":
-      return "Almoxarifado";
-    case "SEGURANCA_TRABALHO":
-      return "Segurança do Trabalho";
+    case "RH":
+      return "RH";
+    case "GERENTE":
+      return "Gerente";
+    case "DIRETORIA":
+      return "Diretoria";
     case "CONSULTA":
       return "Consulta";
   }

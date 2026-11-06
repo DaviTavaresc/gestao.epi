@@ -18,7 +18,7 @@ type FormData = { ppeItemId: string; quantidade: number; vidaUtilDiasOverride?: 
 
 export default function PositionMatrixPage() {
   const { canWrite } = usePermissions();
-  const canEdit = canWrite(["SEGURANCA_TRABALHO"]);
+  const canEdit = canWrite(["RH"]);
   const [selectedPositionId, setSelectedPositionId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [removing, setRemoving] = useState<PositionRequirement | null>(null);

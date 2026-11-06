@@ -10,7 +10,7 @@ import { applyStockMovement } from "../utils/stock";
 import { assertBranchAllowed, resolveBranchFilter } from "../utils/branchScope";
 
 export const purchasesRouter = Router();
-purchasesRouter.use(requireAuth, requireWriteRole("ALMOXARIFADO"));
+purchasesRouter.use(requireAuth, requireWriteRole("RH", "GERENTE"));
 
 const itemSchema = z.object({
   ppeItemId: z.string().min(1),

@@ -308,7 +308,7 @@ export type OrgUser = {
   id: string;
   name: string;
   email: string;
-  role: "ADMIN" | "ALMOXARIFADO" | "SEGURANCA_TRABALHO" | "CONSULTA";
+  role: "ADMIN" | "RH" | "GERENTE" | "DIRETORIA" | "CONSULTA";
   status: RecordStatus;
   lastLoginAt?: string | null;
   createdAt: string;

@@ -11,7 +11,7 @@ import { applyStockMovement, getOrCreateBranchStock, stockStatus } from "../util
 import { assertBranchAllowed, resolveBranchFilter } from "../utils/branchScope";
 
 export const stockRouter = Router();
-stockRouter.use(requireAuth, requireWriteRole("ALMOXARIFADO"));
+stockRouter.use(requireAuth, requireWriteRole("RH", "GERENTE"));
 
 // Estoque atual por filial. Sem branchId, um usuário corporativo vê todas as filiais.
 stockRouter.get("/current", async (req, res, next) => {

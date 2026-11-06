@@ -21,7 +21,7 @@ type FormData = { razaoSocial: string; nomeFantasia?: string; cnpj: string; tele
 
 export default function SuppliersPage() {
   const { canWrite } = usePermissions();
-  const canEdit = canWrite(["ALMOXARIFADO"]);
+  const canEdit = canWrite(["RH", "GERENTE"]);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);

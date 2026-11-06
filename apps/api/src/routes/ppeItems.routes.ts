@@ -12,7 +12,7 @@ import { applyStockMovement } from "../utils/stock";
 import { assertBranchAllowed, resolveBranchFilter } from "../utils/branchScope";
 
 export const ppeItemsRouter = Router();
-ppeItemsRouter.use(requireAuth, requireWriteRole("SEGURANCA_TRABALHO", "ALMOXARIFADO"));
+ppeItemsRouter.use(requireAuth, requireWriteRole("RH"));
 
 const camposDoItem = {
   nome: z.string().min(2),

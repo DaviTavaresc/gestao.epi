@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Power, KeyRound, Pencil } from "lucide-react";
+import { Plus, Power, KeyRound, Pencil, Trash2 } from "lucide-react";
 import { api, extractErrorMessage } from "../../lib/api";
 import { OrgUser } from "../../types";
 import { Card, CardHeader } from "../../components/ui/Card";
@@ -24,6 +24,7 @@ export default function UsersPage() {
   const [editing, setEditing] = useState<OrgUser | null>(null);
   const [toggling, setToggling] = useState<OrgUser | null>(null);
   const [resettingPw, setResettingPw] = useState<OrgUser | null>(null);
+  const [deleting, setDeleting] = useState<OrgUser | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const queryClient = useQueryClient();
 
@@ -59,6 +60,19 @@ export default function UsersPage() {
       toast.success("Status atualizado com sucesso.");
       queryClient.invalidateQueries({ queryKey: ["users"] });
       setToggling(null);
+    },
+    onError: (err) => toast.error(extractErrorMessage(err)),
+  });
+
+  // A API recusa a exclusão de quem já tem histórico (entrega, estoque, auditoria)
+  // e manda inativar: o nome dessa pessoa consta em documentos que precisam dizer
+  // quem fez cada operação. A mensagem dela é mostrada como está, sem reescrever.
+  const deleteMutation = useMutation({
+    mutationFn: async () => api.delete(`/users/${deleting!.id}`),
+    onSuccess: () => {
+      toast.success("Acesso excluído.");
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      setDeleting(null);
     },
     onError: (err) => toast.error(extractErrorMessage(err)),
   });
@@ -105,6 +119,7 @@ export default function UsersPage() {
                   <Button title="Editar usuário" variant="ghost" size="sm" onClick={() => { editForm.reset({ name: u.name, role: u.role, branchId: u.branchId ?? "" }); setEditing(u); }}><Pencil className="h-4 w-4" /></Button>
                   <Button title="Redefinir senha" variant="ghost" size="sm" onClick={() => setResettingPw(u)}><KeyRound className="h-4 w-4" /></Button>
                   <Button title="Ativar ou inativar usuário" variant="ghost" size="sm" onClick={() => setToggling(u)}><Power className="h-4 w-4" /></Button>
+                  <Button title="Excluir acesso" variant="ghost" size="sm" onClick={() => setDeleting(u)}><Trash2 className="h-4 w-4 text-red-600" /></Button>
                 </div>
               ),
               className: "text-right",
@@ -132,14 +147,15 @@ export default function UsersPage() {
           <Input label="E-mail" type="email" required {...createForm.register("email", { required: true })} />
           <Input label="Senha provisória" type="password" required hint="Mínimo de 8 caracteres" {...createForm.register("password", { required: true, minLength: 8 })} />
           <Select label="Perfil de acesso" required {...createForm.register("role", { required: true })}>
-            <option value="ADMIN">Administrador</option>
-            <option value="ALMOXARIFADO">Almoxarifado</option>
-            <option value="SEGURANCA_TRABALHO">Segurança do Trabalho</option>
-            <option value="CONSULTA">Consulta</option>
+            <option value="ADMIN">Administrador — acesso total, inclusive a esta tela</option>
+            <option value="RH">RH — cadastros e operação, no grupo inteiro</option>
+            <option value="GERENTE">Gerente — operação apenas da filial dele</option>
+            <option value="DIRETORIA">Diretoria — só leitura, vê o grupo inteiro</option>
+            <option value="CONSULTA">Consulta — só leitura</option>
           </Select>
           <Select
             label="Filial"
-            hint="Deixe em branco para acesso a todas as filiais (perfil corporativo)"
+            hint="Em branco = todas as filiais. Obrigatória no perfil Gerente, que opera só a unidade dele."
             {...createForm.register("branchId")}
           >
             <option value="">Todas as filiais</option>
@@ -165,14 +181,15 @@ export default function UsersPage() {
           {editMutation.isError && <InlineBanner tone="error">{extractErrorMessage(editMutation.error)}</InlineBanner>}
           <Input label="Nome completo" required {...editForm.register("name", { required: true })} />
           <Select label="Perfil de acesso" required {...editForm.register("role", { required: true })}>
-            <option value="ADMIN">Administrador</option>
-            <option value="ALMOXARIFADO">Almoxarifado</option>
-            <option value="SEGURANCA_TRABALHO">Segurança do Trabalho</option>
-            <option value="CONSULTA">Consulta</option>
+            <option value="ADMIN">Administrador — acesso total, inclusive a esta tela</option>
+            <option value="RH">RH — cadastros e operação, no grupo inteiro</option>
+            <option value="GERENTE">Gerente — operação apenas da filial dele</option>
+            <option value="DIRETORIA">Diretoria — só leitura, vê o grupo inteiro</option>
+            <option value="CONSULTA">Consulta — só leitura</option>
           </Select>
           <Select
             label="Filial"
-            hint="Deixe em branco para acesso a todas as filiais (perfil corporativo)"
+            hint="Em branco = todas as filiais. Obrigatória no perfil Gerente, que opera só a unidade dele."
             {...editForm.register("branchId")}
           >
             <option value="">Todas as filiais</option>
@@ -204,6 +221,19 @@ export default function UsersPage() {
         loading={toggleMutation.isPending}
         onConfirm={() => toggling && toggleMutation.mutate(toggling)}
         onClose={() => setToggling(null)}
+      />
+
+      <ConfirmDialog
+        open={!!deleting}
+        title="Excluir acesso"
+        message={
+          `Excluir o acesso de "${deleting?.name}" (${deleting?.email})? Isso apaga o usuário de vez e não tem volta. ` +
+          `Se ele já registrou entrega, movimentação de estoque ou qualquer operação, a exclusão será recusada: ` +
+          `nesse caso use Inativar, que tira o login na hora e preserva o histórico.`
+        }
+        loading={deleteMutation.isPending}
+        onConfirm={() => deleting && deleteMutation.mutate()}
+        onClose={() => setDeleting(null)}
       />
     </div>
   );

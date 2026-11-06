@@ -14,7 +14,7 @@ import { sendExcel } from "../utils/excel";
 import { custoUnitarioDeReferencia } from "../utils/charges";
 
 export const chargesRouter = Router();
-chargesRouter.use(requireAuth, requireWriteRole("ALMOXARIFADO"));
+chargesRouter.use(requireAuth, requireWriteRole("RH", "GERENTE"));
 
 const include = {
   employee: { select: { id: true, nomeCompleto: true, matricula: true, cpf: true, branch: { select: { id: true, nome: true } } } },
@@ -336,7 +336,7 @@ const statusSchema = z.object({
 });
 
 // Perdoar ou cancelar isenta o colaborador de um valor, por isso fica restrito ao ADMIN.
-chargesRouter.patch("/:id/status", requireRole("ADMIN", "SEGURANCA_TRABALHO"), async (req, res, next) => {
+chargesRouter.patch("/:id/status", requireRole("ADMIN", "RH"), async (req, res, next) => {
   try {
     const { organizationId, id: userId, role } = req.user!;
     const data = statusSchema.parse(req.body);

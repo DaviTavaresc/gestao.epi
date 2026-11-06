@@ -27,7 +27,7 @@ type TrocaRow = {
 
 export default function TrocasPage() {
   const { canWrite } = usePermissions();
-  const canDeliver = canWrite(["ALMOXARIFADO"]);
+  const canDeliver = canWrite(["RH", "GERENTE"]);
   const navigate = useNavigate();
   const [status, setStatus] = useState("");
   const [branchId, setBranchId] = useState("");

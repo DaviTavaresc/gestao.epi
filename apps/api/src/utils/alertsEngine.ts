@@ -160,14 +160,14 @@ export async function refreshAlerts(organizationId: string) {
 }
 
 // Mapeia cada tipo de alerta para os perfis que devem ser avisados por notificação.
-const ALERT_NOTIFY_ROLES: Record<string, ("ADMIN" | "ALMOXARIFADO" | "SEGURANCA_TRABALHO")[]> = {
-  ESTOQUE_MINIMO: ["ALMOXARIFADO", "ADMIN"],
-  ESTOQUE_ZERADO: ["ALMOXARIFADO", "ADMIN"],
-  CA_VENCIDO: ["SEGURANCA_TRABALHO", "ADMIN"],
-  CA_PROXIMO_VENCIMENTO: ["SEGURANCA_TRABALHO", "ADMIN"],
-  EPI_VENCIDO: ["SEGURANCA_TRABALHO", "ADMIN"],
-  EPI_PROXIMO_TROCA: ["SEGURANCA_TRABALHO", "ADMIN"],
-  ENTREGA_PENDENTE_CONFIRMACAO: ["ALMOXARIFADO", "ADMIN"],
+const ALERT_NOTIFY_ROLES: Record<string, ("ADMIN" | "RH" | "GERENTE")[]> = {
+  ESTOQUE_MINIMO: ["RH", "GERENTE", "ADMIN"],
+  ESTOQUE_ZERADO: ["RH", "GERENTE", "ADMIN"],
+  CA_VENCIDO: ["RH", "ADMIN"],
+  CA_PROXIMO_VENCIMENTO: ["RH", "ADMIN"],
+  EPI_VENCIDO: ["RH", "ADMIN"],
+  EPI_PROXIMO_TROCA: ["RH", "ADMIN"],
+  ENTREGA_PENDENTE_CONFIRMACAO: ["RH", "GERENTE", "ADMIN"],
 };
 
 const ALERT_LINK: Record<string, string> = {

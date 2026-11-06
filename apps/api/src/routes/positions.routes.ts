@@ -8,7 +8,7 @@ import { parsePagination, toSkipTake, buildPageResult } from "../utils/paginatio
 import { writeAuditLog } from "../utils/audit";
 
 export const positionsRouter = Router();
-positionsRouter.use(requireAuth, requireWriteRole("SEGURANCA_TRABALHO"));
+positionsRouter.use(requireAuth, requireWriteRole("RH"));
 
 const upsertSchema = z.object({
   nome: z.string().min(2),

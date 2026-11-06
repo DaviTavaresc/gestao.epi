@@ -31,7 +31,7 @@ type FormData = {
 
 export default function ReturnsPage() {
   const { canWrite } = usePermissions();
-  const canEdit = canWrite(["ALMOXARIFADO"]);
+  const canEdit = canWrite(["RH", "GERENTE"]);
   const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
   const queryClient = useQueryClient();

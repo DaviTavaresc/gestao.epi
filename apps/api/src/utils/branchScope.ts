@@ -2,11 +2,14 @@ import { AuthenticatedUser } from "../middleware/auth";
 import { forbidden } from "./httpError";
 
 // Regra de acesso por filial:
-// - ADMIN enxerga todas as filiais da organização.
+// - ADMIN e DIRETORIA enxergam todas as empresas do grupo, sempre. A diretoria
+//   acompanha o conjunto; prendê-la a uma filial esvaziaria o perfil, mesmo que
+//   alguém vincule uma filial ao usuário dela por engano.
 // - Usuário sem filial definida também enxerga todas (perfil matriz / corporativo).
-// - Demais usuários ficam restritos à própria filial.
+// - Demais usuários ficam restritos à própria filial. É o caso do GERENTE, que
+//   opera só a unidade dele — por isso o cadastro exige filial nesse perfil.
 export function canAccessAllBranches(user: AuthenticatedUser): boolean {
-  return user.role === "ADMIN" || user.branchId === null;
+  return user.role === "ADMIN" || user.role === "DIRETORIA" || user.branchId === null;
 }
 
 // Filtro Prisma para listagens que possuem coluna branchId direta.

@@ -52,26 +52,27 @@ async function main() {
 
   await prisma.user.createMany({
     data: [
-      // Admin e SST são corporativos (branchId nulo = enxergam todas as filiais).
+      // Admin, RH, Diretoria e Consulta são corporativos (branchId nulo = todas as filiais).
       { organizationId: organization.id, name: "Administrador Demo", email: "admin@demoepi.com.br", passwordHash, role: "ADMIN" },
-      { organizationId: organization.id, name: "Segurança do Trabalho Demo", email: "seguranca@demoepi.com.br", passwordHash, role: "SEGURANCA_TRABALHO" },
+      { organizationId: organization.id, name: "RH Demo", email: "rh@demoepi.com.br", passwordHash, role: "RH" },
+      { organizationId: organization.id, name: "Diretoria Demo", email: "diretoria@demoepi.com.br", passwordHash, role: "DIRETORIA" },
       { organizationId: organization.id, name: "Consulta Demo", email: "consulta@demoepi.com.br", passwordHash, role: "CONSULTA" },
-      // Almoxarifes ficam restritos à própria filial.
+      // Gerente sempre tem filial: o perfil existe para operar uma unidade só.
       {
         organizationId: organization.id,
         branchId: filialPara.id,
-        name: "Almoxarifado Pará",
-        email: "almoxarifado@demoepi.com.br",
+        name: "Gerente Pará",
+        email: "gerente.pa@demoepi.com.br",
         passwordHash,
-        role: "ALMOXARIFADO",
+        role: "GERENTE",
       },
       {
         organizationId: organization.id,
         branchId: filialAmazonas.id,
-        name: "Almoxarifado Amazonas",
-        email: "almoxarifado.am@demoepi.com.br",
+        name: "Gerente Amazonas",
+        email: "gerente.am@demoepi.com.br",
         passwordHash,
-        role: "ALMOXARIFADO",
+        role: "GERENTE",
       },
     ],
   });

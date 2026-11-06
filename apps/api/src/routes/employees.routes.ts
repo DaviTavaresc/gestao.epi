@@ -10,7 +10,7 @@ import { computeLifecycleStatus } from "../utils/ppeStatus";
 import { assertBranchAllowed, resolveBranchFilter } from "../utils/branchScope";
 
 export const employeesRouter = Router();
-employeesRouter.use(requireAuth, requireWriteRole("SEGURANCA_TRABALHO"));
+employeesRouter.use(requireAuth, requireWriteRole("RH"));
 
 const upsertSchema = z.object({
   nomeCompleto: z.string().min(2),

@@ -36,7 +36,7 @@ export default function EmployeeDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { canWrite } = usePermissions();
-  const canEdit = canWrite(["SEGURANCA_TRABALHO"]);
+  const canEdit = canWrite(["RH"]);
   const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery<DetailResponse>({
@@ -102,7 +102,7 @@ export default function EmployeeDetailPage() {
               <option value="DESLIGADO">Desligado</option>
             </Select>
           )}
-          {canWrite(["ALMOXARIFADO"]) && employee.status === "ATIVO" && (
+          {canWrite(["RH", "GERENTE"]) && employee.status === "ATIVO" && (
             <Button onClick={() => navigate(`/entregas/nova?employeeId=${employee.id}`)}>
               <Truck className="h-4 w-4" /> Preparar entrega
             </Button>

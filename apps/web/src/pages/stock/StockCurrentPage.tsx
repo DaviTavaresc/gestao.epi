@@ -29,7 +29,7 @@ type NovoItemFormData = {
 
 export default function StockCurrentPage() {
   const { canWrite } = usePermissions();
-  const canEdit = canWrite(["ALMOXARIFADO"]);
+  const canEdit = canWrite(["RH", "GERENTE"]);
   const [search, setSearch] = useState("");
   const [branchId, setBranchId] = useState("");
   const [adjusting, setAdjusting] = useState<BranchStock | null>(null);

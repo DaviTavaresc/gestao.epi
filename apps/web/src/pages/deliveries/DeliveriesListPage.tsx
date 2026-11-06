@@ -25,7 +25,7 @@ const tabs = [
 
 export default function DeliveriesListPage() {
   const { canWrite } = usePermissions();
-  const canEdit = canWrite(["ALMOXARIFADO", "SEGURANCA_TRABALHO"]);
+  const canEdit = canWrite(["RH", "GERENTE"]);
   const navigate = useNavigate();
   const [status, setStatus] = useState("PENDENTE");
   const [page, setPage] = useState(1);
