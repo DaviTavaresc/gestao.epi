@@ -30,6 +30,7 @@ export default function DeliveryDetailPage() {
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [motivoCancelamento, setMotivoCancelamento] = useState("");
   const [abrindoTermo, setAbrindoTermo] = useState(false);
+  const [abrindoFicha, setAbrindoFicha] = useState(false);
 
   const { data: delivery, isLoading } = useQuery<Delivery>({
     queryKey: ["delivery", id],
@@ -77,6 +78,9 @@ export default function DeliveryDetailPage() {
   if (isLoading) return <Spinner />;
   if (!delivery) return <EmptyState title="Entrega não encontrada" />;
 
+  // Entrega lançada a partir da ficha de papel assinada, anterior ao sistema.
+  const fichaImportada = delivery.origem === "FICHA_IMPORTADA";
+
   return (
     <div className="space-y-6">
       <button onClick={() => navigate("/entregas")} className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700">
@@ -91,14 +95,34 @@ export default function DeliveryDetailPage() {
               {delivery.employee.nomeCompleto}
             </Link>
           </h1>
-          <p className="text-sm text-slate-500">
-            {new Date(delivery.createdAt).toLocaleDateString("pt-BR")} às{" "}
-            {new Date(delivery.createdAt).toLocaleTimeString("pt-BR")} · Motivo: {delivery.motivo} · Por{" "}
-            {delivery.createdBy.name}
-            {delivery.branch && <> · {delivery.branch.nome}</>}
-          </p>
+          {/* Na ficha importada, createdAt é o dia em que alguém digitou. A data que
+              interessa é a do papel assinado — mostrar a de digitação como data da
+              entrega faria a tela contradizer a ficha anexada. */}
+          {fichaImportada ? (
+            <p className="text-sm text-slate-500">
+              Entrega de{" "}
+              {delivery.dataFicha
+                ? new Date(delivery.dataFicha).toLocaleDateString("pt-BR")
+                : new Date(delivery.createdAt).toLocaleDateString("pt-BR")}{" "}
+              (conforme ficha) · Motivo: {delivery.motivo} · Lançada por {delivery.createdBy.name} em{" "}
+              {new Date(delivery.createdAt).toLocaleDateString("pt-BR")}
+              {delivery.branch && <> · {delivery.branch.nome}</>}
+            </p>
+          ) : (
+            <p className="text-sm text-slate-500">
+              {new Date(delivery.createdAt).toLocaleDateString("pt-BR")} às{" "}
+              {new Date(delivery.createdAt).toLocaleTimeString("pt-BR")} · Motivo: {delivery.motivo} · Por{" "}
+              {delivery.createdBy.name}
+              {delivery.branch && <> · {delivery.branch.nome}</>}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
+          {fichaImportada && (
+            <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700">
+              Ficha importada
+            </span>
+          )}
           <StatusBadge status={delivery.status} />
           <Button
             variant="outline"
@@ -169,6 +193,39 @@ export default function DeliveryDetailPage() {
         </CardBody>
       </Card>
 
+      {/* A ficha importada tem comprovação, mas em papel. Mostrar o bloco de
+          "confirmação eletrônica" vazio para ela sugeriria entrega não comprovada. */}
+      {fichaImportada ? (
+        <Card>
+          <CardHeader
+            title="Comprovação de recebimento"
+            subtitle="Entrega anterior ao sistema, lançada a partir da ficha assinada em papel"
+          />
+          <CardBody className="space-y-4">
+            <InlineBanner tone="info">
+              Esta entrega não tem confirmação eletrônica porque ninguém digitou o nome: quem assinou,
+              assinou no papel. A ficha digitalizada abaixo é a prova do recebimento. A entrega também
+              não baixou estoque, porque a saída do almoxarifado aconteceu fora do sistema.
+            </InlineBanner>
+            <Button
+              variant="outline"
+              loading={abrindoFicha}
+              onClick={async () => {
+                setAbrindoFicha(true);
+                try {
+                  await openPdfFromApi(`/deliveries/${delivery.id}/ficha`, `ficha-epi-${delivery.id}`);
+                } catch (err) {
+                  toast.error(extractErrorMessage(err));
+                } finally {
+                  setAbrindoFicha(false);
+                }
+              }}
+            >
+              <FileDown className="h-4 w-4" /> Abrir ficha assinada
+            </Button>
+          </CardBody>
+        </Card>
+      ) : (
       <Card>
         <CardHeader title="Confirmação eletrônica de recebimento" />
         <CardBody className="space-y-4">
@@ -230,6 +287,7 @@ export default function DeliveryDetailPage() {
           )}
         </CardBody>
       </Card>
+      )}
 
       <Modal
         open={confirmCancel}

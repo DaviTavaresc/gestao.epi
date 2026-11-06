@@ -68,6 +68,11 @@ export type DeliveryTermData = {
     cancelada?: boolean;
     cancelamentoMotivo?: string | null;
     canceladoEm?: Date | null;
+    // Entrega lançada a partir da ficha de papel assinada, anterior ao sistema.
+    // O termo precisa dizer isso: ela não tem confirmação eletrônica, e omitir
+    // a origem faria o documento parecer uma entrega nascida no sistema.
+    fichaImportada?: boolean;
+    dataFicha?: Date | null;
   };
   items: { nome: string; ca: string | null; quantidade: number; dataPrevistaTroca: Date }[];
   confirmation?: { nomeDigitado: string; confirmedAt: Date; id: string; photo?: Buffer | null } | null;
@@ -121,9 +126,17 @@ export function generateDeliveryTermPdf(res: Response, data: DeliveryTermData) {
       `Contratado por: ${data.employee.filialContrato ?? "-"} — CNPJ ${data.employee.cnpjContrato}`
     );
   }
-  doc.text(
-    `Data e hora da entrega: ${data.delivery.createdAt.toLocaleDateString("pt-BR")} às ${data.delivery.createdAt.toLocaleTimeString("pt-BR")}`
-  );
+  if (data.delivery.fichaImportada) {
+    // Na ficha importada, createdAt é o dia em que alguém digitou — a data que
+    // vale é a do papel assinado. Imprimir a data de digitação como data de
+    // entrega faria o termo contradizer a ficha anexada.
+    const dataFicha = data.delivery.dataFicha ?? data.delivery.createdAt;
+    doc.text(`Data da entrega (conforme ficha assinada): ${dataFicha.toLocaleDateString("pt-BR")}`);
+  } else {
+    doc.text(
+      `Data e hora da entrega: ${data.delivery.createdAt.toLocaleDateString("pt-BR")} às ${data.delivery.createdAt.toLocaleTimeString("pt-BR")}`
+    );
+  }
   doc.text(`Responsável pela entrega: ${data.delivery.responsavel}`);
   doc.moveDown();
 
@@ -173,6 +186,26 @@ export function generateDeliveryTermPdf(res: Response, data: DeliveryTermData) {
     { width: fullWidth, align: "justify" }
   );
   doc.moveDown();
+
+  // A ficha importada tem comprovação, mas em papel. Chamar esse bloco de
+  // "confirmação eletrônica" e deixá-lo vazio sugeriria entrega não comprovada.
+  if (data.delivery.fichaImportada) {
+    doc.fontSize(11).fillColor("#0f172a").text("Comprovação de recebimento", left, doc.y, { width: fullWidth, underline: true });
+    doc.moveDown(0.4);
+    const dataFicha = data.delivery.dataFicha ?? data.delivery.createdAt;
+    doc.fontSize(9).fillColor("#1e293b").text(
+      `Entrega anterior ao sistema, lançada a partir da ficha de EPI assinada em papel, ` +
+        `datada de ${dataFicha.toLocaleDateString("pt-BR")}. A ficha digitalizada está anexada ao ` +
+        `registro desta entrega no sistema e é a prova do recebimento. ` +
+        `Esta entrega não possui confirmação eletrônica por digitação nem baixa de estoque, ` +
+        `porque ambas ocorreram fora do sistema.`,
+      left,
+      doc.y,
+      { width: fullWidth, align: "justify" }
+    );
+    doc.end();
+    return;
+  }
 
   doc.fontSize(11).fillColor("#0f172a").text("Confirmação eletrônica", left, doc.y, { width: fullWidth, underline: true });
   doc.moveDown(0.4);

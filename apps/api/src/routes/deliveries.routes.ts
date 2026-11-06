@@ -11,7 +11,7 @@ import { computeLifecycleStatus, effectiveItemStatus, computeCaStatus } from "..
 import { imagemBufferSeguraParaPdf } from "../utils/imageSafety";
 import { namesMatch } from "../utils/nameMatch";
 import { generateDeliveryTermPdf } from "../utils/pdf";
-import { uploadConfirmationPhoto } from "../utils/upload";
+import { uploadConfirmationPhoto, uploadDocument } from "../utils/upload";
 import { armazenamento, nomeUnico } from "../utils/storage";
 import { applyStockMovement } from "../utils/stock";
 import { assertBranchAllowed, resolveBranchFilter } from "../utils/branchScope";
@@ -61,6 +61,54 @@ async function marcarEntregasAnterioresComoSubstituidas(
   }
 
   return anteriores.length;
+}
+
+// Mesma ideia da função acima, mas decidindo quem substitui quem pela DATA, e não
+// pela ordem em que foi digitado. Numa ficha de papel importada a data vem do
+// papel, e as fichas raramente são digitadas em ordem: a de 2024 pode entrar
+// depois da de 2025. Pela ordem de digitação, a ficha de 2024 marcaria a de 2025
+// como substituída e o colaborador apareceria com um EPI vencido que ele já trocou.
+//
+// Devolve também os EPIs em que a ficha recém-importada já nasce substituída,
+// porque o colaborador recebeu aquele mesmo EPI numa data posterior.
+async function aplicarSubstituicaoPorData(
+  tx: Prisma.TransactionClient,
+  employeeId: string,
+  entregaAtualId: string,
+  ppeItemIds: string[],
+  dataEntrega: Date
+): Promise<{ anterioresSubstituidos: number; jaSuperados: Set<string> }> {
+  if (ppeItemIds.length === 0) return { anterioresSubstituidos: 0, jaSuperados: new Set() };
+
+  const outros = await tx.deliveryItem.findMany({
+    where: {
+      ppeItemId: { in: ppeItemIds },
+      status: { notIn: ["DEVOLVIDO", "SUBSTITUIDO"] },
+      deliveryId: { not: entregaAtualId },
+      delivery: { employeeId, status: "CONFIRMADA" },
+    },
+    select: { id: true, deliveryId: true, ppeItemId: true, dataEntrega: true },
+  });
+
+  const anteriores = outros.filter((i) => i.dataEntrega < dataEntrega);
+  const posteriores = outros.filter((i) => i.dataEntrega >= dataEntrega);
+
+  if (anteriores.length > 0) {
+    await tx.deliveryItem.updateMany({
+      where: { id: { in: anteriores.map((i) => i.id) } },
+      data: { status: "SUBSTITUIDO" },
+    });
+    for (const deliveryId of new Set(anteriores.map((i) => i.deliveryId))) {
+      const restantes = await tx.deliveryItem.count({
+        where: { deliveryId, status: { notIn: ["DEVOLVIDO", "SUBSTITUIDO"] } },
+      });
+      if (restantes === 0) {
+        await tx.delivery.update({ where: { id: deliveryId }, data: { status: "SUBSTITUIDA" } });
+      }
+    }
+  }
+
+  return { anterioresSubstituidos: anteriores.length, jaSuperados: new Set(posteriores.map((i) => i.ppeItemId)) };
 }
 
 // ===================== PREPARAÇÃO INTELIGENTE DE ENTREGA =====================
@@ -400,6 +448,232 @@ deliveriesRouter.post("/", async (req, res, next) => {
   }
 });
 
+// ===================== IMPORTAÇÃO DE FICHA DE EPI EM PAPEL =====================
+// Lança no sistema uma entrega que já aconteceu, a partir da ficha assinada em
+// papel digitalizada. Difere da entrega normal em três pontos, e cada um tem razão:
+//
+// 1. NÃO movimenta estoque. A saída do almoxarifado aconteceu antes do sistema
+//    existir; debitar agora criaria um furo de estoque do tamanho do histórico.
+// 2. NÃO exige estoque disponível nem CA válido. A ficha registra o passado: o CA
+//    daquele EPI provavelmente já venceu, e recusar por isso impediria importar
+//    justamente as fichas mais antigas, que são a maioria.
+// 3. NÃO cria confirmação eletrônica. Ninguém digitou o nome: quem assinou,
+//    assinou no papel. Inventar uma confirmação eletrônica seria fabricar prova.
+//    A prova é o PDF anexado, e a tela precisa dizer isso com clareza.
+//
+// O que ela faz igual à entrega normal, e é o motivo de valer a pena: grava os
+// itens com data de entrega e data prevista de troca. É isso que coloca o EPI em
+// "EPIs atuais" do colaborador e faz o alerta de troca funcionar.
+const itemDaFichaSchema = z.object({
+  ppeItemId: z.string().min(1),
+  quantidade: z.coerce.number().int().positive(),
+});
+
+const importarFichaSchema = z.object({
+  employeeId: z.string().min(1),
+  // A ficha traz data sem hora. Guardar meia-noite UTC faria o dia aparecer um a
+  // menos em qualquer fuso a oeste de Greenwich — no Amazonas (UTC-4), a ficha de
+  // 05/05 sairia impressa como 04/05 no termo de entrega. Ancorar ao meio-dia
+  // local elimina a chance de a conversão de fuso cruzar a virada do dia.
+  dataFicha: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Informe a data da ficha no formato AAAA-MM-DD.")
+    .transform((texto) => {
+      const [ano, mes, dia] = texto.split("-").map(Number);
+      return new Date(ano, mes - 1, dia, 12, 0, 0, 0);
+    }),
+  motivo: z
+    .enum(["PRIMEIRA_ENTREGA", "SUBSTITUICAO", "TROCA", "PERDA", "DANIFICACAO", "VENCIMENTO", "ADMISSAO", "OUTRO"])
+    .optional(),
+  observacoes: z.string().max(2000).optional().nullable(),
+  // A requisição é multipart, então os itens chegam como texto JSON.
+  items: z.preprocess((valor) => {
+    if (typeof valor !== "string") return valor;
+    try {
+      return JSON.parse(valor);
+    } catch {
+      // Devolve o texto cru para o zod reclamar do formato, em vez de estourar aqui.
+      return valor;
+    }
+  }, z.array(itemDaFichaSchema).min(1)),
+});
+
+deliveriesRouter.post("/importar-ficha", uploadDocument.single("ficha"), async (req, res, next) => {
+  const arquivo = req.file;
+  let chaveDoArquivo: string | null = null;
+  // Se a transação falhar depois de gravar o PDF, remove o arquivo órfão.
+  const descartarArquivoGravado = async () => {
+    if (chaveDoArquivo) await armazenamento.remover("documents", chaveDoArquivo).catch(() => undefined);
+  };
+
+  try {
+    const { organizationId, id: userId } = req.user!;
+    const data = importarFichaSchema.parse(req.body);
+
+    if (!arquivo) throw badRequest("Anexe a ficha de EPI digitalizada (PDF, JPG ou PNG).");
+
+    const employee = await prisma.employee.findFirst({
+      where: { id: data.employeeId, organizationId, ...resolveBranchFilter(req.user!) },
+      include: { branch: true },
+    });
+    if (!employee) throw badRequest("Colaborador inválido.");
+    // Ao contrário da entrega normal, colaborador desligado ou afastado é aceito:
+    // a ficha dele é histórico, e histórico de EPI não se descarta ao desligar.
+    assertBranchAllowed(req.user!, employee.branchId);
+
+    const agora = new Date();
+    if (data.dataFicha > agora) {
+      throw badRequest("A data da ficha está no futuro. Informe a data que consta no papel assinado.");
+    }
+    if (data.dataFicha < new Date("1990-01-01")) {
+      throw badRequest("A data da ficha é anterior a 1990. Confira o que foi digitado.");
+    }
+
+    const ppeItemIds = [...new Set(data.items.map((i) => i.ppeItemId))];
+    if (ppeItemIds.length !== data.items.length) {
+      throw badRequest("A ficha tem o mesmo EPI repetido em duas linhas. Some as quantidades numa só.");
+    }
+    const ppeItems = await prisma.ppeItem.findMany({ where: { id: { in: ppeItemIds }, organizationId } });
+    if (ppeItems.length !== ppeItemIds.length) throw badRequest("Um ou mais EPIs informados são inválidos.");
+
+    // A matriz Cargo x EPI pode definir vida útil própria para o cargo, e ela
+    // prevalece sobre a do catálogo no cálculo da data de troca.
+    const requisitosDoCargo = employee.positionId
+      ? await prisma.positionPpeRequirement.findMany({
+          where: { positionId: employee.positionId, ppeItemId: { in: ppeItemIds } },
+          select: { ppeItemId: true, vidaUtilDiasOverride: true },
+        })
+      : [];
+    const vidaUtilPorItem = new Map(
+      requisitosDoCargo
+        .filter((r) => r.vidaUtilDiasOverride != null)
+        .map((r) => [r.ppeItemId, r.vidaUtilDiasOverride as number])
+    );
+
+    chaveDoArquivo = nomeUnico(arquivo.mimetype, ".pdf");
+    await armazenamento.salvar("documents", chaveDoArquivo, arquivo.buffer, arquivo.mimetype);
+    const chaveGravada = chaveDoArquivo;
+
+    const entrega = await prisma.$transaction(async (tx) => {
+      const criada = await tx.delivery.create({
+        data: {
+          organizationId,
+          // Melhor informação disponível: a filial atual do colaborador. A ficha de
+          // papel é que manda, e ela fica anexada para conferência.
+          branchId: employee.branchId,
+          employeeId: employee.id,
+          motivo: data.motivo ?? "OUTRO",
+          observacoes: data.observacoes ?? null,
+          origem: "FICHA_IMPORTADA",
+          dataFicha: data.dataFicha,
+          // Já nasce confirmada: o recebimento aconteceu e está assinado no papel.
+          status: "CONFIRMADA",
+          createdById: userId,
+        },
+      });
+
+      // Decide por data quem substitui quem, antes de criar os itens desta ficha.
+      const { anterioresSubstituidos, jaSuperados } = await aplicarSubstituicaoPorData(
+        tx,
+        employee.id,
+        criada.id,
+        ppeItemIds,
+        data.dataFicha
+      );
+
+      for (const linha of data.items) {
+        const ppeItem = ppeItems.find((p) => p.id === linha.ppeItemId)!;
+        const vidaUtil = vidaUtilPorItem.get(ppeItem.id) ?? ppeItem.vidaUtilDias;
+
+        await tx.deliveryItem.create({
+          data: {
+            deliveryId: criada.id,
+            ppeItemId: ppeItem.id,
+            caSnapshot: ppeItem.ca,
+            quantidade: linha.quantidade,
+            // Sem compra no sistema para esta entrega: vale o custo do catálogo.
+            custoUnitarioSnapshot: ppeItem.custoUnitario,
+            dataEntrega: data.dataFicha,
+            dataPrevistaTroca: new Date(data.dataFicha.getTime() + vidaUtil * 24 * 60 * 60 * 1000),
+            // Se o colaborador recebeu este mesmo EPI depois desta ficha, o item
+            // desta ficha já nasce substituído: senão apareceria como EPI atual.
+            status: jaSuperados.has(ppeItem.id) ? "SUBSTITUIDO" : "REGULAR",
+          },
+        });
+      }
+
+      const documento = await tx.document.create({
+        data: {
+          organizationId,
+          deliveryId: criada.id,
+          fileName: arquivo.originalname,
+          mimeType: arquivo.mimetype,
+          sizeBytes: arquivo.size,
+          storagePath: chaveGravada,
+          uploadedById: userId,
+        },
+      });
+
+      await writeAuditLog(tx, {
+        organizationId,
+        userId,
+        action: "ENTREGA",
+        entityType: "Delivery",
+        entityId: criada.id,
+        newData: {
+          origem: "FICHA_IMPORTADA",
+          colaborador: employee.nomeCompleto,
+          dataFicha: data.dataFicha.toISOString(),
+          itens: data.items.length,
+          documentoId: documento.id,
+          arquivo: arquivo.originalname,
+          itensAnterioresSubstituidos: anterioresSubstituidos,
+          // Registrado porque muda o que o colaborador aparenta ter hoje.
+          itensDestaFichaJaSubstituidos: data.items.filter((i) => jaSuperados.has(i.ppeItemId)).length,
+          // Deixa explícito na auditoria que não houve baixa de estoque.
+          movimentouEstoque: false,
+        },
+      });
+
+      return tx.delivery.findUniqueOrThrow({
+        where: { id: criada.id },
+        include: { items: { include: { ppeItem: true } }, employee: true, branch: true, documents: true },
+      });
+    });
+
+    res.status(201).json(entrega);
+  } catch (err) {
+    await descartarArquivoGravado();
+    next(err);
+  }
+});
+
+// Ficha de papel digitalizada de uma entrega importada. Servida só para usuário
+// autenticado da própria organização (e da própria filial, quando restrito).
+deliveriesRouter.get("/:id/ficha", async (req, res, next) => {
+  try {
+    const { organizationId } = req.user!;
+    const delivery = await prisma.delivery.findFirst({
+      where: { id: req.params.id, organizationId, ...resolveBranchFilter(req.user!) },
+      include: { documents: { orderBy: { createdAt: "desc" }, take: 1 } },
+    });
+    if (!delivery) throw notFound("Entrega não encontrada.");
+
+    const documento = delivery.documents[0];
+    if (!documento) throw notFound("Esta entrega não possui ficha digitalizada anexada.");
+
+    const conteudo = await armazenamento.ler("documents", documento.storagePath);
+    if (!conteudo) throw notFound("Arquivo da ficha não encontrado no armazenamento.");
+
+    res.setHeader("Content-Type", documento.mimeType);
+    res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(documento.fileName)}"`);
+    res.setHeader("Cache-Control", "private, max-age=3600");
+    res.send(conteudo);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Cancela uma entrega e devolve os itens ao estoque da filial.
 // - PENDENTE: cancelamento simples, feito por quem opera entregas.
 // - CONFIRMADA: é um estorno. Exige perfil ADMIN e justificativa escrita, porque
@@ -419,7 +693,12 @@ deliveriesRouter.post("/:id/cancel", async (req, res, next) => {
       include: { items: { include: { ppeItem: true } }, confirmation: true, employee: true },
     });
     if (!delivery) throw notFound("Entrega não encontrada.");
-    if (!delivery.branchId) throw badRequest("Entrega sem filial definida.");
+
+    // Ficha de papel importada não baixou estoque na entrega, então cancelar não
+    // pode devolver nada: devolveria ao almoxarifado um item que nunca saiu dele,
+    // inflando o saldo. Por isso ela também não exige filial definida.
+    const devolveEstoque = delivery.origem !== "FICHA_IMPORTADA";
+    if (devolveEstoque && !delivery.branchId) throw badRequest("Entrega sem filial definida.");
 
     if (delivery.status === "CANCELADA") throw conflict("Esta entrega já está cancelada.");
     if (delivery.status !== "PENDENTE" && delivery.status !== "CONFIRMADA") {
@@ -439,19 +718,21 @@ deliveriesRouter.post("/:id/cancel", async (req, res, next) => {
     const agora = new Date();
 
     await prisma.$transaction(async (tx) => {
-      for (const item of delivery.items) {
-        await applyStockMovement(tx, {
-          organizationId,
-          branchId: delivery.branchId!,
-          ppeItemId: item.ppeItemId,
-          tipo: "AJUSTE_POSITIVO",
-          quantidade: item.quantidade,
-          motivo: estorno
-            ? `Estorno da entrega confirmada de ${delivery.employee.nomeCompleto}: ${data.motivo}`
-            : `Cancelamento da entrega ${delivery.id}`,
-          referencia: delivery.id,
-          userId,
-        });
+      if (devolveEstoque) {
+        for (const item of delivery.items) {
+          await applyStockMovement(tx, {
+            organizationId,
+            branchId: delivery.branchId!,
+            ppeItemId: item.ppeItemId,
+            tipo: "AJUSTE_POSITIVO",
+            quantidade: item.quantidade,
+            motivo: estorno
+              ? `Estorno da entrega confirmada de ${delivery.employee.nomeCompleto}: ${data.motivo}`
+              : `Cancelamento da entrega ${delivery.id}`,
+            referencia: delivery.id,
+            userId,
+          });
+        }
       }
 
       await tx.delivery.update({
@@ -480,7 +761,9 @@ deliveriesRouter.post("/:id/cancel", async (req, res, next) => {
           status: "CANCELADA",
           estornoDeEntregaConfirmada: estorno,
           justificativa: data.motivo ?? null,
-          itensDevolvidosAoEstoque: delivery.items.length,
+          origem: delivery.origem,
+          // Zero nas fichas importadas: elas nunca baixaram estoque.
+          itensDevolvidosAoEstoque: devolveEstoque ? delivery.items.length : 0,
         },
       });
     });
@@ -541,6 +824,8 @@ deliveriesRouter.get("/:id/termo.pdf", async (req, res, next) => {
         cancelada: delivery.status === "CANCELADA",
         cancelamentoMotivo: delivery.cancelamentoMotivo,
         canceladoEm: delivery.canceladoEm,
+        fichaImportada: delivery.origem === "FICHA_IMPORTADA",
+        dataFicha: delivery.dataFicha,
       },
       items: delivery.items.map((i) => ({ nome: i.ppeItem.nome, ca: i.caSnapshot, quantidade: i.quantidade, dataPrevistaTroca: i.dataPrevistaTroca })),
       confirmation: delivery.confirmation

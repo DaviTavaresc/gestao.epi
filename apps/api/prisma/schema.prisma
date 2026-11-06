@@ -74,6 +74,16 @@ enum DeliveryItemStatus {
   SUBSTITUIDO
 }
 
+// Como a entrega entrou no sistema. FICHA_IMPORTADA é a entrega que aconteceu
+// antes do sistema existir e foi lançada a partir da ficha de papel assinada:
+// ela não tem confirmação eletrônica e não movimentou estoque, porque a saída
+// do almoxarifado ocorreu fora do sistema. O termo de entrega e a tela precisam
+// dizer isso, para ninguém tomar a ficha digitalizada por confirmação eletrônica.
+enum DeliveryOrigin {
+  SISTEMA
+  FICHA_IMPORTADA
+}
+
 enum DeliveryReason {
   PRIMEIRA_ENTREGA
   SUBSTITUICAO
@@ -575,6 +585,9 @@ model Document {
   organization   Organization @relation(fields: [organizationId], references: [id])
   purchaseId     String?
   purchase       Purchase?    @relation(fields: [purchaseId], references: [id])
+  // Ficha de EPI em papel, digitalizada, de uma entrega anterior ao sistema.
+  deliveryId     String?
+  delivery       Delivery?    @relation(fields: [deliveryId], references: [id])
   fileName       String
   mimeType       String
   sizeBytes      Int
@@ -585,6 +598,7 @@ model Document {
   createdAt DateTime @default(now())
 
   @@index([organizationId, purchaseId])
+  @@index([organizationId, deliveryId])
   @@map("documents")
 }
 
@@ -628,6 +642,11 @@ model Delivery {
   status         DeliveryStatus @default(PENDENTE)
   motivo         DeliveryReason
   observacoes    String?
+  origem         DeliveryOrigin @default(SISTEMA)
+  // Data que consta na ficha de papel. Nula nas entregas nascidas no sistema,
+  // onde createdAt já é a data real do recebimento. Numa ficha importada createdAt
+  // é o dia em que alguém digitou, que não tem relação com o dia da entrega.
+  dataFicha      DateTime?
   createdById    String
   createdBy      User           @relation("DeliveryCreatedBy", fields: [createdById], references: [id])
 
@@ -643,6 +662,9 @@ model Delivery {
 
   items        DeliveryItem[]
   confirmation ElectronicConfirmation?
+  // Ficha de papel digitalizada, nas entregas importadas. É a única prova de
+  // recebimento que essas entregas têm.
+  documents    Document[]
 
   @@index([organizationId, status])
   @@index([organizationId, employeeId])

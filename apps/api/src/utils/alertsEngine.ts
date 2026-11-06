@@ -81,7 +81,11 @@ export async function refreshAlerts(organizationId: string) {
   }
 
   const confirmedDeliveries = await prisma.delivery.findMany({
-    where: { organizationId, status: "CONFIRMADA" },
+    // Colaborador desligado fica fora: trocar o EPI de quem não trabalha mais aqui
+    // não é ação possível, então o alerta não seria acionável — só ruído que esconde
+    // os alertas reais. Passou a importar, porque a importação de fichas antigas
+    // traz anos de histórico de gente já desligada, todo ele com data de troca vencida.
+    where: { organizationId, status: "CONFIRMADA", employee: { status: { not: "DESLIGADO" } } },
     include: { items: { include: { ppeItem: true } }, employee: { include: { branch: true } } },
   });
   const returns = await prisma.ppeReturn.findMany({ where: { organizationId } });

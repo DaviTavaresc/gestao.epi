@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Plus } from "lucide-react";
+import { FileUp, Plus } from "lucide-react";
 import { api } from "../../lib/api";
 import { Delivery, Page } from "../../types";
 import { Card } from "../../components/ui/Card";
@@ -11,6 +11,7 @@ import { StatusBadge } from "../../components/ui/Badge";
 import { Pagination } from "../../components/ui/Pagination";
 import { usePermissions } from "../../hooks/usePermissions";
 import { EmployeePickerModal } from "./EmployeePickerModal";
+import { ImportFichaModal } from "./ImportFichaModal";
 import { BranchFilter } from "../../components/BranchFilter";
 import { CardHeader } from "../../components/ui/Card";
 
@@ -30,6 +31,7 @@ export default function DeliveriesListPage() {
   const [page, setPage] = useState(1);
   const [branchId, setBranchId] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [fichaOpen, setFichaOpen] = useState(false);
 
   const { data, isLoading } = useQuery<Page<Delivery>>({
     queryKey: ["deliveries", status, page, branchId],
@@ -44,7 +46,17 @@ export default function DeliveriesListPage() {
           <h1 className="text-xl font-semibold text-slate-800">Entregas</h1>
           <p className="text-sm text-slate-500">Prepare e acompanhe as entregas de EPI aos colaboradores.</p>
         </div>
-        {canEdit && <Button onClick={() => setPickerOpen(true)}><Plus className="h-4 w-4" /> Nova entrega</Button>}
+        {canEdit && (
+          <div className="flex flex-wrap gap-2">
+            {/* A ficha importada nasce confirmada, então aparece na aba "Confirmadas". */}
+            <Button variant="outline" onClick={() => setFichaOpen(true)}>
+              <FileUp className="h-4 w-4" /> Importar ficha em papel
+            </Button>
+            <Button onClick={() => setPickerOpen(true)}>
+              <Plus className="h-4 w-4" /> Nova entrega
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="flex gap-2 border-b border-slate-200">
@@ -92,6 +104,8 @@ export default function DeliveriesListPage() {
         onClose={() => setPickerOpen(false)}
         onSelect={(employeeId) => navigate(`/entregas/nova?employeeId=${employeeId}`)}
       />
+
+      <ImportFichaModal open={fichaOpen} onClose={() => setFichaOpen(false)} />
     </div>
   );
 }

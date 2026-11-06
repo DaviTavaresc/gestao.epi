@@ -207,6 +207,11 @@ export type Delivery = {
   status: DeliveryStatus;
   motivo: string;
   observacoes?: string | null;
+  // "FICHA_IMPORTADA" é a entrega anterior ao sistema, lançada a partir da ficha
+  // de papel assinada: não tem confirmação eletrônica e não baixou estoque.
+  origem?: "SISTEMA" | "FICHA_IMPORTADA";
+  // Data que consta na ficha de papel. Nas entregas do sistema vem nula e vale o createdAt.
+  dataFicha?: string | null;
   items: DeliveryItem[];
   confirmation?: ElectronicConfirmation | null;
   createdBy: { id: string; name: string };

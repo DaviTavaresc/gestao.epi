@@ -226,15 +226,42 @@ export default function EmployeeDetailPage() {
                     <Link to={`/entregas/${d.id}`} className="font-medium text-navy-700 hover:underline">
                       Entrega · {d.items.length} item(ns)
                     </Link>
-                    <StatusBadge status={d.status} />
+                    <span className="flex items-center gap-2">
+                      {d.origem === "FICHA_IMPORTADA" && (
+                        <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">
+                          Ficha em papel
+                        </span>
+                      )}
+                      <StatusBadge status={d.status} />
+                    </span>
                   </div>
-                  <p className="text-xs text-slate-400">
-                    {new Date(d.createdAt).toLocaleString("pt-BR")} · Motivo: {d.motivo} · Por {d.createdBy.name}
-                  </p>
-                  {d.confirmation && (
-                    <p className="text-xs text-emerald-600">
-                      Confirmado eletronicamente por "{d.confirmation.nomeDigitado}" em {new Date(d.confirmation.confirmedAt).toLocaleString("pt-BR")}
+                  {/* A ficha importada tem duas datas: a do papel (a entrega) e a da
+                      digitação. Mostrar só a de digitação colocaria uma entrega de
+                      2024 na linha do tempo como se fosse de hoje. */}
+                  {d.origem === "FICHA_IMPORTADA" ? (
+                    <p className="text-xs text-slate-400">
+                      Entrega de{" "}
+                      {d.dataFicha
+                        ? new Date(d.dataFicha).toLocaleDateString("pt-BR")
+                        : new Date(d.createdAt).toLocaleDateString("pt-BR")}{" "}
+                      · Motivo: {d.motivo} · Lançada por {d.createdBy.name} em{" "}
+                      {new Date(d.createdAt).toLocaleDateString("pt-BR")}
                     </p>
+                  ) : (
+                    <p className="text-xs text-slate-400">
+                      {new Date(d.createdAt).toLocaleString("pt-BR")} · Motivo: {d.motivo} · Por {d.createdBy.name}
+                    </p>
+                  )}
+                  {d.origem === "FICHA_IMPORTADA" ? (
+                    <p className="text-xs text-sky-700">
+                      Recebimento comprovado por ficha assinada em papel, anexada à entrega.
+                    </p>
+                  ) : (
+                    d.confirmation && (
+                      <p className="text-xs text-emerald-600">
+                        Confirmado eletronicamente por "{d.confirmation.nomeDigitado}" em {new Date(d.confirmation.confirmedAt).toLocaleString("pt-BR")}
+                      </p>
+                    )
                   )}
                 </li>
               ))}
