@@ -278,13 +278,22 @@ export default function PpeItemsPage() {
           <Input label="Custo unitário padrão (R$)" type="number" step="0.01" required {...register("custoUnitario", { required: true, valueAsNumber: true, min: 0 })} />
           {!editing && (
             <>
+              {/* Os dois campos são um atalho para quem já tem o EPI em mãos ao
+                  cadastrar. Quem não tem deixa em branco e lança depois por
+                  Estoque ou por uma Compra. A filial só é pedida quando existe
+                  quantidade, porque o estoque no sistema é sempre de uma filial
+                  — não há onde guardar uma quantidade sem dono. */}
               <Input
                 label="Estoque inicial"
                 type="number"
-                hint="Quantidade já existente no estoque ao cadastrar"
+                hint="Opcional — a quantidade que já existe hoje. Pode deixar em branco."
                 {...register("estoqueInicial", { valueAsNumber: true, min: 0 })}
               />
-              <Select label="Filial do estoque inicial" hint="Obrigatório se informar estoque inicial" {...register("branchId")}>
+              <Select
+                label="Filial do estoque inicial"
+                hint="Opcional. Só precisa preencher se informar a quantidade acima."
+                {...register("branchId")}
+              >
                 <option value="">Selecione...</option>
                 {branches?.map((b) => (
                   <option key={b.id} value={b.id}>

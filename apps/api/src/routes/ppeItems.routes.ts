@@ -51,12 +51,24 @@ function comRegrasDeCa<T extends z.ZodRawShape>(schema: z.ZodObject<T>) {
 
 const upsertSchema = comRegrasDeCa(z.object(camposDoItem));
 
-// Estoque inicial é sempre lançado em uma filial específica.
+// Estoque inicial e filial são opcionais: quem cadastra o EPI sem ter nada em
+// mãos deixa os dois em branco e lança depois por Estoque ou por uma Compra.
+//
+// O formulário manda a filial como "" quando ninguém escolhe no "Selecione...",
+// e a quantidade como null quando o campo fica vazio. Os dois querem dizer "não
+// informado", e precisam ser aceitos: antes a API respondia "Dados inválidos."
+// e não havia como cadastrar um EPI sem escolher filial.
+//
+// A filial só passa a ser exigida quando existe quantidade, mais abaixo, porque
+// estoque no sistema é sempre de uma filial — não há onde guardar uma
+// quantidade sem dono.
+const vazioComoAusente = (valor: unknown) => (valor === "" || valor === null ? undefined : valor);
+
 const createSchema = comRegrasDeCa(
   z.object({
     ...camposDoItem,
-    estoqueInicial: z.coerce.number().int().min(0).default(0),
-    branchId: z.string().min(1).optional(),
+    estoqueInicial: z.preprocess(vazioComoAusente, z.coerce.number().int().min(0).default(0)),
+    branchId: z.preprocess(vazioComoAusente, z.string().min(1).optional()),
   })
 );
 
