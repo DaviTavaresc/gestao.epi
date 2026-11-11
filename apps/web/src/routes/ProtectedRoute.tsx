@@ -12,14 +12,9 @@ export function ProtectedRoute() {
   return <Outlet />;
 }
 
-export function AdminRoute() {
-  const role = useAuthStore((s) => s.user?.role);
-  if (role !== "ADMIN") return <Navigate to="/" replace />;
-  return <Outlet />;
-}
-
-// Área aberta a alguns perfis além do administrador, que entra em todas. O
-// backend repete a mesma regra: aqui é só para não mostrar tela que daria 403.
+// Área restrita a perfis específicos. O administrador entra em todas, então uma
+// área só dele é RoleRoute com a lista vazia. O backend repete a mesma regra:
+// aqui é só para não mostrar tela que daria 403.
 export function RoleRoute({ roles }: { roles: Role[] }) {
   const role = useAuthStore((s) => s.user?.role);
   if (!role || (role !== "ADMIN" && !roles.includes(role))) return <Navigate to="/" replace />;

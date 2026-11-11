@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
 import { api } from "./lib/api";
 import { useAuthStore } from "./stores/authStore";
-import { ProtectedRoute, AdminRoute, RoleRoute } from "./routes/ProtectedRoute";
+import { ProtectedRoute, RoleRoute } from "./routes/ProtectedRoute";
 import { AppLayout } from "./components/layout/AppLayout";
 import { ToastHost } from "./components/ui/ToastHost";
 
