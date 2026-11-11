@@ -8,13 +8,26 @@ import { hashPassword } from "../utils/password";
 import { writeAuditLog } from "../utils/audit";
 
 export const usersRouter = Router();
-// O RH enxerga a lista de acessos e cadastra gente nova: é ele quem recebe o
-// pedido quando alguém entra na empresa. Mexer em acesso que já existe — trocar
-// perfil, redefinir senha, inativar, excluir — continua só com o administrador,
-// por isso cada uma dessas rotas repete a trava abaixo.
+// O RH administra os acessos da equipe: cadastra, edita, redefine senha, inativa
+// e exclui. O que ele não alcança é quem está acima dele — conta de
+// administrador só outro administrador toca, e promover alguém a administrador
+// também é só do administrador. Sem essas duas travas o RH se promoveria a ADMIN
+// e os dois perfis passariam a valer exatamente o mesmo.
 usersRouter.use(requireAuth, requireRole("ADMIN", "RH"));
 
-const somenteAdmin = requireRole("ADMIN");
+function exigirPoderSobre(papelDoAtor: string, papelDoAlvo: string) {
+  if (papelDoAtor === "ADMIN") return;
+  if (papelDoAlvo === "ADMIN") {
+    throw forbidden("Apenas outro administrador pode mexer numa conta de administrador.");
+  }
+}
+
+function exigirPoderParaDarPerfil(papelDoAtor: string, novoPapel: string) {
+  if (papelDoAtor === "ADMIN") return;
+  if (novoPapel === "ADMIN") {
+    throw forbidden("Apenas o administrador pode dar o perfil de administrador. Escolha outro perfil ou peça a ele.");
+  }
+}
 
 usersRouter.get("/", async (req, res, next) => {
   try {
@@ -66,12 +79,7 @@ usersRouter.post("/", async (req, res, next) => {
 
     exigirFilialDoGerente(data.role, data.branchId);
 
-    // Só um administrador cria outro administrador. Sem esta trava o RH criaria
-    // um acesso ADMIN e entraria com ele, ganhando por um desvio o poder que a
-    // tela de edição lhe nega.
-    if (data.role === "ADMIN" && req.user!.role !== "ADMIN") {
-      throw forbidden("Apenas o administrador pode criar outro administrador. Escolha outro perfil ou peça a ele.");
-    }
+    exigirPoderParaDarPerfil(req.user!.role, data.role);
 
     const existing = await prisma.user.findUnique({ where: { email: data.email } });
     if (existing) throw conflict("Este e-mail já está cadastrado.");
@@ -114,7 +122,7 @@ const updateSchema = z.object({
   branchId: z.string().optional().nullable(),
 });
 
-usersRouter.put("/:id", somenteAdmin, async (req, res, next) => {
+usersRouter.put("/:id", async (req, res, next) => {
   try {
     const { organizationId, id: actingUserId } = req.user!;
     const data = updateSchema.parse(req.body);
@@ -123,6 +131,8 @@ usersRouter.put("/:id", somenteAdmin, async (req, res, next) => {
 
     const existing = await prisma.user.findFirst({ where: { id: req.params.id, organizationId } });
     if (!existing) throw notFound("Usuário não encontrado.");
+    exigirPoderSobre(req.user!.role, existing.role);
+    exigirPoderParaDarPerfil(req.user!.role, data.role);
 
     if (data.branchId) {
       const branch = await prisma.branch.findFirst({ where: { id: data.branchId, organizationId } });
@@ -156,7 +166,7 @@ usersRouter.put("/:id", somenteAdmin, async (req, res, next) => {
   }
 });
 
-usersRouter.patch("/:id/status", somenteAdmin, async (req, res, next) => {
+usersRouter.patch("/:id/status", async (req, res, next) => {
   try {
     const { organizationId, id: actingUserId } = req.user!;
     const { status } = z.object({ status: z.enum(["ATIVO", "INATIVO"]) }).parse(req.body);
@@ -167,6 +177,7 @@ usersRouter.patch("/:id/status", somenteAdmin, async (req, res, next) => {
 
     const existing = await prisma.user.findFirst({ where: { id: req.params.id, organizationId } });
     if (!existing) throw notFound("Usuário não encontrado.");
+    exigirPoderSobre(req.user!.role, existing.role);
 
     const user = await prisma.user.update({
       where: { id: existing.id },
@@ -190,13 +201,14 @@ usersRouter.patch("/:id/status", somenteAdmin, async (req, res, next) => {
 
 const resetPasswordByAdminSchema = z.object({ newPassword: z.string().min(8) });
 
-usersRouter.post("/:id/reset-password", somenteAdmin, async (req, res, next) => {
+usersRouter.post("/:id/reset-password", async (req, res, next) => {
   try {
     const { organizationId, id: actingUserId } = req.user!;
     const { newPassword } = resetPasswordByAdminSchema.parse(req.body);
 
     const existing = await prisma.user.findFirst({ where: { id: req.params.id, organizationId } });
     if (!existing) throw notFound("Usuário não encontrado.");
+    exigirPoderSobre(req.user!.role, existing.role);
 
     const passwordHash = await hashPassword(newPassword);
     await prisma.$transaction([
@@ -211,14 +223,15 @@ usersRouter.post("/:id/reset-password", somenteAdmin, async (req, res, next) => 
   }
 });
 
-// Exclui um acesso de vez. Só o ADMIN chega aqui (somenteAdmin nesta rota).
+// Exclui um acesso de vez. O RH chega aqui, mas não para contas de
+// administrador: a trava é exigirPoderSobre, logo abaixo.
 //
 // Um usuário que já operou fica amarrado ao histórico: ele assina a entrega como
 // responsável, aparece na movimentação de estoque e na auditoria. Apagar a linha
 // dele arrancaria o nome de documentos que precisam dizer quem fez o quê — e a
 // entrega de EPI é prova legal. Nesse caso a exclusão é recusada e o caminho é
 // inativar, que tira o acesso e preserva o histórico.
-usersRouter.delete("/:id", somenteAdmin, async (req, res, next) => {
+usersRouter.delete("/:id", async (req, res, next) => {
   try {
     const { organizationId, id: actingUserId } = req.user!;
 
@@ -228,6 +241,7 @@ usersRouter.delete("/:id", somenteAdmin, async (req, res, next) => {
 
     const existing = await prisma.user.findFirst({ where: { id: req.params.id, organizationId } });
     if (!existing) throw notFound("Usuário não encontrado.");
+    exigirPoderSobre(req.user!.role, existing.role);
 
     if (existing.role === "ADMIN") {
       const admins = await prisma.user.count({ where: { organizationId, role: "ADMIN", status: "ATIVO" } });

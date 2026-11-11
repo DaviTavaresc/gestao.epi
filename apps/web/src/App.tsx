@@ -114,9 +114,6 @@ export default function App() {
             <Route element={<RoleRoute roles={["RH"]} />}>
               <Route path="/admin/usuarios" element={<UsersPage />} />
               <Route path="/admin/auditoria" element={<AuditLogsPage />} />
-            </Route>
-
-            <Route element={<AdminRoute />}>
               <Route path="/admin/configuracoes" element={<SettingsPage />} />
             </Route>
           </Route>

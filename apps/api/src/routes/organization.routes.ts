@@ -52,7 +52,7 @@ const updateSchema = z.object({
   exigirFotoConfirmacao: booleanDoFormulario(true).optional(),
 });
 
-organizationRouter.put("/", requireRole("ADMIN"), async (req, res, next) => {
+organizationRouter.put("/", requireRole("ADMIN", "RH"), async (req, res, next) => {
   try {
     const { organizationId, id: userId } = req.user!;
     const data = updateSchema.parse(req.body);
@@ -69,7 +69,7 @@ organizationRouter.put("/", requireRole("ADMIN"), async (req, res, next) => {
   }
 });
 
-organizationRouter.post("/logo", requireRole("ADMIN"), uploadLogo.single("logo"), async (req, res, next) => {
+organizationRouter.post("/logo", requireRole("ADMIN", "RH"), uploadLogo.single("logo"), async (req, res, next) => {
   try {
     const { organizationId, id: userId } = req.user!;
     if (!req.file) throw badRequest("Nenhum arquivo enviado.");

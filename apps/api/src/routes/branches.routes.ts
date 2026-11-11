@@ -61,7 +61,7 @@ branchesRouter.get("/:id", async (req, res, next) => {
   }
 });
 
-branchesRouter.post("/", requireRole("ADMIN"), async (req, res, next) => {
+branchesRouter.post("/", requireRole("ADMIN", "RH"), async (req, res, next) => {
   try {
     const { organizationId, id: userId } = req.user!;
     const data = upsertSchema.parse(req.body);
@@ -80,7 +80,7 @@ branchesRouter.post("/", requireRole("ADMIN"), async (req, res, next) => {
   }
 });
 
-branchesRouter.put("/:id", requireRole("ADMIN"), async (req, res, next) => {
+branchesRouter.put("/:id", requireRole("ADMIN", "RH"), async (req, res, next) => {
   try {
     const { organizationId, id: userId } = req.user!;
     const data = upsertSchema.parse(req.body);
@@ -113,7 +113,7 @@ branchesRouter.put("/:id", requireRole("ADMIN"), async (req, res, next) => {
   }
 });
 
-branchesRouter.patch("/:id/status", requireRole("ADMIN"), async (req, res, next) => {
+branchesRouter.patch("/:id/status", requireRole("ADMIN", "RH"), async (req, res, next) => {
   try {
     const { organizationId, id: userId } = req.user!;
     const { status } = z.object({ status: z.enum(["ATIVO", "INATIVO"]) }).parse(req.body);
@@ -137,7 +137,7 @@ branchesRouter.patch("/:id/status", requireRole("ADMIN"), async (req, res, next)
   }
 });
 
-branchesRouter.delete("/:id", requireRole("ADMIN"), async (req, res, next) => {
+branchesRouter.delete("/:id", requireRole("ADMIN", "RH"), async (req, res, next) => {
   try {
     const { organizationId } = req.user!;
     const existing = await prisma.branch.findFirst({

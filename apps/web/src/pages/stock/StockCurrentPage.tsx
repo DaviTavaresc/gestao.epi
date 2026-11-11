@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { SlidersHorizontal, FileDown, FileSpreadsheet, PackagePlus } from "lucide-react";
+import { SlidersHorizontal, FileDown, FileSpreadsheet, PackagePlus, Trash2 } from "lucide-react";
 import { api, extractErrorMessage } from "../../lib/api";
 import { downloadFromApi } from "../../lib/download";
 import { BranchStock, PpeItem, Page } from "../../types";
@@ -10,6 +10,7 @@ import { DataTable } from "../../components/ui/DataTable";
 import { Button } from "../../components/ui/Button";
 import { Input, Select, Textarea } from "../../components/ui/Field";
 import { Modal } from "../../components/ui/Modal";
+import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { StatusBadge, Badge } from "../../components/ui/Badge";
 import { InlineBanner } from "../../components/ui/Feedback";
 import { usePermissions } from "../../hooks/usePermissions";
@@ -35,8 +36,24 @@ export default function StockCurrentPage() {
   const [adjusting, setAdjusting] = useState<BranchStock | null>(null);
   const [editingLimits, setEditingLimits] = useState<BranchStock | null>(null);
   const [novoItemOpen, setNovoItemOpen] = useState(false);
+  const [removendo, setRemovendo] = useState<BranchStock | null>(null);
   const queryClient = useQueryClient();
   const { data: branches } = useBranches();
+
+  // Tira o EPI do estoque desta filial. A API só aceita com saldo zerado: apagar
+  // uma linha com saldo faria a quantidade sumir sem explicação no livro de
+  // movimentações. Quem precisa dar baixa usa Ajustar primeiro.
+  const removeMutation = useMutation({
+    mutationFn: async () => api.delete(`/stock/current/${removendo!.id}`),
+    onSuccess: () => {
+      toast.success("EPI removido do estoque desta filial.");
+      queryClient.invalidateQueries({ queryKey: ["stock-current"] });
+      queryClient.invalidateQueries({ queryKey: ["ppe-items"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      setRemovendo(null);
+    },
+    onError: (err) => toast.error(extractErrorMessage(err)),
+  });
 
   const { data, isLoading } = useQuery<BranchStock[]>({
     queryKey: ["stock-current", search, branchId],
@@ -214,6 +231,9 @@ export default function StockCurrentPage() {
                     >
                       Parâmetros
                     </Button>
+                    <Button title="Remover este EPI do estoque da filial" variant="ghost" size="sm" onClick={() => setRemovendo(s)}>
+                      <Trash2 className="h-4 w-4 text-red-600" />
+                    </Button>
                   </div>
                 ),
               className: "text-right",
@@ -376,6 +396,22 @@ export default function StockCurrentPage() {
           />
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={!!removendo}
+        title="Remover EPI do estoque da filial"
+        message={
+          `Remover "${removendo?.ppeItem.nome}" do estoque de ${removendo?.branch.nome}? ` +
+          `O EPI continua no catálogo e nas outras filiais; some apenas desta lista, com o mínimo, ` +
+          `o máximo e o custo configurados aqui. Só funciona com o saldo zerado — havendo quantidade, ` +
+          `dê baixa em Ajustar primeiro, informando o motivo.`
+        }
+        confirmLabel="Remover"
+        tone="danger"
+        loading={removeMutation.isPending}
+        onConfirm={() => removendo && removeMutation.mutate()}
+        onClose={() => setRemovendo(null)}
+      />
     </div>
   );
 }

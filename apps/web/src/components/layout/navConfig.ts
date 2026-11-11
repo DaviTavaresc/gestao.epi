@@ -95,11 +95,11 @@ export const navGroups: NavGroup[] = [
   {
     title: "Administração",
     items: [
-      // O RH cadastra acessos e acompanha a auditoria. Alterar ou excluir um
-      // acesso que já existe, e as configurações da empresa, ficam com o ADMIN.
+      // O RH administra junto com o administrador. A única coisa fora do alcance
+      // dele é a conta de administrador, travada dentro da tela de Usuários.
       { label: "Usuários", to: "/admin/usuarios", icon: ShieldCheck, roles: ["ADMIN", "RH"] },
       { label: "Auditoria", to: "/admin/auditoria", icon: History, roles: ["ADMIN", "RH"] },
-      { label: "Configurações", to: "/admin/configuracoes", icon: Settings, roles: ["ADMIN"] },
+      { label: "Configurações", to: "/admin/configuracoes", icon: Settings, roles: ["ADMIN", "RH"] },
     ],
   },
 ];

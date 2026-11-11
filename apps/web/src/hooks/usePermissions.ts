@@ -11,5 +11,8 @@ export function usePermissions() {
     return allowedRoles.includes(role);
   }
 
-  return { role, isAdmin: role === "ADMIN", canWrite };
+  // Administracao: filiais, configuracoes da empresa e acessos. O RH entra
+  // junto com o administrador; o que ele nao alcanca e a conta de administrador,
+  // regra conferida caso a caso (e repetida pela API).
+  return { role, isAdmin: role === "ADMIN", isAdminOrRh: role === "ADMIN" || role === "RH", canWrite };
 }

@@ -143,6 +143,54 @@ const limitsSchema = z.object({
   custoUnitario: z.coerce.number().min(0).optional(),
 });
 
+// Tira o EPI do estoque de uma filial: some a linha da tela de Estoque atual.
+// É para o item que foi parar ali por engano ou que aquela unidade não usa mais.
+//
+// Só com saldo zerado. Apagar uma linha com saldo faria a quantidade sumir sem
+// deixar rastro no livro de movimentações, que é onde se explica cada entrada e
+// cada saída. Quem precisa dar baixa usa Ajustar, informa o motivo, e aí remove.
+stockRouter.delete("/current/:id", async (req, res, next) => {
+  try {
+    const { organizationId, id: userId } = req.user!;
+
+    const stock = await prisma.branchStock.findFirst({
+      where: { id: req.params.id, organizationId },
+      include: { ppeItem: { select: { nome: true } }, branch: { select: { nome: true } } },
+    });
+    if (!stock) throw notFound("Item de estoque não encontrado.");
+    assertBranchAllowed(req.user!, stock.branchId);
+
+    if (stock.estoqueAtual !== 0) {
+      throw badRequest(
+        `Este EPI ainda tem ${stock.estoqueAtual} em estoque nesta filial. ` +
+          `Zere o saldo em Ajustar, informando o motivo, antes de remover o item da filial.`
+      );
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.branchStock.delete({ where: { id: stock.id } });
+      await writeAuditLog(tx, {
+        organizationId,
+        userId,
+        action: "ALTERACAO",
+        entityType: "BranchStock",
+        entityId: stock.id,
+        oldData: {
+          epi: stock.ppeItem.nome,
+          filial: stock.branch.nome,
+          estoqueMinimo: stock.estoqueMinimo,
+          estoqueMaximo: stock.estoqueMaximo,
+        },
+        newData: { removidoDaFilial: true },
+      });
+    });
+
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
 stockRouter.put("/limits", async (req, res, next) => {
   try {
     const { organizationId, id: userId } = req.user!;

@@ -21,11 +21,13 @@ type CreateFormData = { name: string; email: string; password: string; role: Rol
 type EditFormData = { name: string; role: Role; branchId?: string };
 
 export default function UsersPage() {
-  // O RH entra nesta tela para ver os acessos e cadastrar gente nova. Alterar
-  // perfil, redefinir senha, inativar e excluir são do administrador, e a API
-  // recusa essas chamadas vindas do RH: esconder os botões evita o 403 na cara
-  // de quem não tem o que fazer com eles.
-  const { isAdmin } = usePermissions();
+  // O RH administra os acessos da equipe junto com o administrador. O que ele
+  // não alcança é quem está acima dele: conta de administrador só outro
+  // administrador edita, e só o administrador dá o perfil de administrador.
+  // A API recusa as duas coisas; esconder os botões evita o 403 na cara de quem
+  // não tem o que fazer com eles.
+  const { isAdmin, isAdminOrRh } = usePermissions();
+  const podeMexerEm = (u: OrgUser) => isAdmin || u.role !== "ADMIN";
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<OrgUser | null>(null);
   const [toggling, setToggling] = useState<OrgUser | null>(null);
@@ -101,7 +103,7 @@ export default function UsersPage() {
           <p className="text-sm text-slate-500">
             {isAdmin
               ? "Gerencie os usuários e perfis de acesso da empresa."
-              : "Veja os acessos da empresa e cadastre novos usuários. Alterar ou excluir um acesso existente é do administrador."}
+              : "Gerencie os acessos da equipe. Contas de administrador só outro administrador altera."}
           </p>
         </div>
         <Button onClick={() => { createForm.reset({ name: "", email: "", password: "", role: "CONSULTA", branchId: "" }); setCreateOpen(true); }}>
@@ -122,18 +124,21 @@ export default function UsersPage() {
             },
             { header: "Status", cell: (u) => <StatusBadge status={u.status} /> },
             { header: "Último login", cell: (u) => (u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString("pt-BR") : "Nunca") },
-            ...(isAdmin
+            ...(isAdminOrRh
               ? [
                   {
                     header: "",
-                    cell: (u: OrgUser) => (
+                    cell: (u: OrgUser) =>
+                      !podeMexerEm(u) ? (
+                        <span className="text-xs text-slate-400">Administrador</span>
+                      ) : (
                       <div className="flex justify-end gap-1">
                         <Button title="Editar usuário" variant="ghost" size="sm" onClick={() => { editForm.reset({ name: u.name, role: u.role, branchId: u.branchId ?? "" }); setEditing(u); }}><Pencil className="h-4 w-4" /></Button>
                         <Button title="Redefinir senha" variant="ghost" size="sm" onClick={() => setResettingPw(u)}><KeyRound className="h-4 w-4" /></Button>
                         <Button title="Ativar ou inativar usuário" variant="ghost" size="sm" onClick={() => setToggling(u)}><Power className="h-4 w-4" /></Button>
                         <Button title="Excluir acesso" variant="ghost" size="sm" onClick={() => setDeleting(u)}><Trash2 className="h-4 w-4 text-red-600" /></Button>
                       </div>
-                    ),
+                      ),
                     className: "text-right",
                   },
                 ]
@@ -196,7 +201,8 @@ export default function UsersPage() {
           {editMutation.isError && <InlineBanner tone="error">{extractErrorMessage(editMutation.error)}</InlineBanner>}
           <Input label="Nome completo" required {...editForm.register("name", { required: true })} />
           <Select label="Perfil de acesso" required {...editForm.register("role", { required: true })}>
-            <option value="ADMIN">Administrador — acesso total, inclusive a esta tela</option>
+            {/* Só o administrador promove alguém a administrador; a API também recusa. */}
+            {isAdmin && <option value="ADMIN">Administrador — acesso total, inclusive a esta tela</option>}
             <option value="RH">RH — cadastros, acessos e auditoria, no grupo inteiro</option>
             <option value="GERENTE">Gerente — operação apenas da filial dele</option>
             <option value="DIRETORIA">Diretoria — só leitura, vê o grupo inteiro</option>

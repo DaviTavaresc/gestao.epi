@@ -27,7 +27,7 @@ type FormData = {
 };
 
 export default function BranchesPage() {
-  const { isAdmin } = usePermissions();
+  const { isAdminOrRh } = usePermissions();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Branch | null>(null);
   const [toggling, setToggling] = useState<Branch | null>(null);
@@ -111,7 +111,7 @@ export default function BranchesPage() {
           <Button variant="outline" onClick={() => downloadFromApi("/reports/estoque", { format: "pdf" }, "estoque-por-filial.pdf")}>
             <FileDown className="h-4 w-4" /> Estoque (PDF)
           </Button>
-          {isAdmin && (
+          {isAdminOrRh && (
             <Button onClick={openCreate}>
               <Plus className="h-4 w-4" /> Nova filial
             </Button>
@@ -119,9 +119,9 @@ export default function BranchesPage() {
         </div>
       </div>
 
-      {!isAdmin && (
+      {!isAdminOrRh && (
         <InlineBanner tone="info">
-          Apenas usuários com perfil Administrador podem cadastrar, editar ou inativar filiais.
+          Apenas os perfis Administrador e RH podem cadastrar, editar, inativar ou excluir filiais.
         </InlineBanner>
       )}
 
@@ -147,7 +147,7 @@ export default function BranchesPage() {
             {
               header: "",
               cell: (b) =>
-                isAdmin && (
+                isAdminOrRh && (
                   <div className="flex justify-end gap-1">
                     <Button title="Editar filial" variant="ghost" size="sm" onClick={() => openEdit(b)}>
                       <Pencil className="h-4 w-4" />
