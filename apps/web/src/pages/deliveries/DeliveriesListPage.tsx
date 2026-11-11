@@ -1,13 +1,15 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { FileUp, Plus } from "lucide-react";
-import { api } from "../../lib/api";
+import { FileUp, Plus, Trash2 } from "lucide-react";
+import { api, extractErrorMessage } from "../../lib/api";
 import { Delivery, Page } from "../../types";
 import { Card } from "../../components/ui/Card";
 import { DataTable } from "../../components/ui/DataTable";
 import { Button } from "../../components/ui/Button";
+import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 import { StatusBadge } from "../../components/ui/Badge";
+import { toast } from "../../stores/toastStore";
 import { Pagination } from "../../components/ui/Pagination";
 import { usePermissions } from "../../hooks/usePermissions";
 import { EmployeePickerModal } from "./EmployeePickerModal";
@@ -24,19 +26,36 @@ const tabs = [
 ];
 
 export default function DeliveriesListPage() {
-  const { canWrite } = usePermissions();
+  const { canWrite, role } = usePermissions();
   const canEdit = canWrite(["RH", "GERENTE"]);
+  // Excluir apaga a entrega de vez, com a confirmação assinada e a ficha
+  // digitalizada junto: fica com administrador e RH. A API repete a regra.
+  const podeExcluir = role === "ADMIN" || role === "RH";
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [status, setStatus] = useState("PENDENTE");
   const [page, setPage] = useState(1);
   const [branchId, setBranchId] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [fichaOpen, setFichaOpen] = useState(false);
+  const [excluindo, setExcluindo] = useState<Delivery | null>(null);
 
   const { data, isLoading } = useQuery<Page<Delivery>>({
     queryKey: ["deliveries", status, page, branchId],
     queryFn: async () =>
       (await api.get("/deliveries", { params: { status: status || undefined, page, branchId: branchId || undefined } })).data,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => api.delete(`/deliveries/${excluindo!.id}`),
+    onSuccess: () => {
+      toast.success("Entrega excluída.");
+      queryClient.invalidateQueries({ queryKey: ["deliveries"] });
+      queryClient.invalidateQueries({ queryKey: ["employee"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      setExcluindo(null);
+    },
+    onError: (err) => toast.error(extractErrorMessage(err)),
   });
 
   return (
@@ -89,6 +108,30 @@ export default function DeliveriesListPage() {
             },
             { header: "Responsável", cell: (d) => d.createdBy.name },
             { header: "Status", cell: (d) => <StatusBadge status={d.status} /> },
+            ...(podeExcluir
+              ? [
+                  {
+                    header: "",
+                    // stopPropagation: a linha inteira abre a entrega ao ser clicada.
+                    cell: (d: Delivery) => (
+                      <div className="flex justify-end">
+                        <Button
+                          title="Excluir entrega"
+                          variant="ghost"
+                          size="sm"
+                          onClick={(evt) => {
+                            evt.stopPropagation();
+                            setExcluindo(d);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 text-red-600" />
+                        </Button>
+                      </div>
+                    ),
+                    className: "text-right",
+                  },
+                ]
+              : []),
           ]}
           rows={data?.items ?? []}
           loading={isLoading}
@@ -106,6 +149,22 @@ export default function DeliveriesListPage() {
       />
 
       <ImportFichaModal open={fichaOpen} onClose={() => setFichaOpen(false)} />
+
+      <ConfirmDialog
+        open={!!excluindo}
+        title="Excluir entrega"
+        message={
+          `Excluir a entrega de "${excluindo?.employee.nomeCompleto}"? Isso apaga a entrega de vez, junto com a ` +
+          `confirmação assinada pelo colaborador, a foto e a ficha digitalizada, e não tem volta. ` +
+          `Os itens voltam ao estoque, como no cancelamento. ` +
+          `Para apenas tornar a entrega sem efeito mantendo o registro, abra a entrega e use Cancelar.`
+        }
+        confirmLabel="Excluir"
+        tone="danger"
+        loading={deleteMutation.isPending}
+        onConfirm={() => excluindo && deleteMutation.mutate()}
+        onClose={() => setExcluindo(null)}
+      />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, FileDown, Ban } from "lucide-react";
+import { ArrowLeft, FileDown, Ban, Trash2 } from "lucide-react";
 import { api, extractErrorMessage } from "../../lib/api";
 import { Delivery } from "../../types";
 import { Card, CardHeader, CardBody } from "../../components/ui/Card";
@@ -21,14 +21,19 @@ export default function DeliveryDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { canWrite, isAdmin } = usePermissions();
+  const { canWrite, role } = usePermissions();
   const canEdit = canWrite(["RH", "GERENTE"]);
+  // Cancelar uma entrega confirmada e excluir qualquer entrega desfazem um
+  // documento assinado pelo colaborador: ficam com administrador e RH, não com
+  // o gerente da filial. A API repete a mesma regra.
+  const podeDesfazer = role === "ADMIN" || role === "RH";
 
   const [nomeDigitado, setNomeDigitado] = useState("");
   const [concordo, setConcordo] = useState(false);
   const [photo, setPhoto] = useState<File | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [motivoCancelamento, setMotivoCancelamento] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [abrindoTermo, setAbrindoTermo] = useState(false);
   const [abrindoFicha, setAbrindoFicha] = useState(false);
 
@@ -65,6 +70,20 @@ export default function DeliveryDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["delivery", id] });
       setConfirmCancel(false);
       setMotivoCancelamento("");
+    },
+    onError: (err) => toast.error(extractErrorMessage(err)),
+  });
+
+  // Excluir apaga a entrega de vez, junto com a confirmação, a foto e a ficha
+  // digitalizada. Depois disso ela só existe na auditoria.
+  const deleteMutation = useMutation({
+    mutationFn: async () => api.delete(`/deliveries/${id}`),
+    onSuccess: () => {
+      toast.success("Entrega excluída.");
+      queryClient.invalidateQueries({ queryKey: ["deliveries"] });
+      queryClient.invalidateQueries({ queryKey: ["employee"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      navigate("/entregas");
     },
     onError: (err) => toast.error(extractErrorMessage(err)),
   });
@@ -145,9 +164,14 @@ export default function DeliveryDetailPage() {
               <Ban className="h-4 w-4" /> Cancelar
             </Button>
           )}
-          {isAdmin && delivery.status === "CONFIRMADA" && (
+          {podeDesfazer && delivery.status === "CONFIRMADA" && (
             <Button variant="danger" onClick={() => { setMotivoCancelamento(""); setConfirmCancel(true); }}>
               <Ban className="h-4 w-4" /> Cancelar entrega
+            </Button>
+          )}
+          {podeDesfazer && (
+            <Button variant="outline" onClick={() => setConfirmDelete(true)}>
+              <Trash2 className="h-4 w-4 text-red-600" /> Excluir
             </Button>
           )}
         </div>
@@ -331,6 +355,43 @@ export default function DeliveryDetailPage() {
               O estoque dos itens desta entrega será restituído à filial. Esta ação não pode ser desfeita.
             </p>
           )}
+        </div>
+      </Modal>
+
+      <Modal
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        title="Excluir entrega"
+        size="sm"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setConfirmDelete(false)}>
+              Voltar
+            </Button>
+            <Button variant="danger" loading={deleteMutation.isPending} onClick={() => deleteMutation.mutate()}>
+              Excluir definitivamente
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3 text-sm text-slate-600">
+          <InlineBanner tone="error">
+            A entrega será apagada e <strong>não há como desfazer</strong>. Ela some do histórico do colaborador.
+          </InlineBanner>
+          <p>Vão junto, e para sempre:</p>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>os {delivery.items.length} item(ns) desta entrega;</li>
+            {delivery.confirmation && <li>a confirmação eletrônica assinada pelo colaborador, com a foto;</li>}
+            {delivery.origem === "FICHA_IMPORTADA" && <li>a ficha de papel digitalizada que foi anexada;</li>}
+            <li>o termo de entrega, que deixa de poder ser emitido.</li>
+          </ul>
+          {delivery.status !== "CANCELADA" && delivery.origem !== "FICHA_IMPORTADA" && (
+            <p>Os itens voltam para o estoque da filial, como acontece no cancelamento.</p>
+          )}
+          <p>
+            Se a ideia é apenas tornar a entrega sem efeito mantendo o registro, use <strong>Cancelar</strong> em vez
+            de excluir.
+          </p>
         </div>
       </Modal>
     </div>

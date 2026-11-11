@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../prisma";
 import { requireAuth } from "../middleware/auth";
-import { requireWriteRole } from "../middleware/rbac";
+import { requireRole, requireWriteRole } from "../middleware/rbac";
 import { badRequest, conflict, forbidden, notFound } from "../utils/httpError";
 import { parsePagination, toSkipTake, buildPageResult } from "../utils/pagination";
 import { writeAuditLog } from "../utils/audit";
@@ -707,8 +707,11 @@ deliveriesRouter.post("/:id/cancel", async (req, res, next) => {
 
     const estorno = delivery.status === "CONFIRMADA";
     if (estorno) {
-      if (role !== "ADMIN") {
-        throw forbidden("Apenas administradores podem cancelar uma entrega já confirmada pelo colaborador.");
+      // Cancelar uma entrega já confirmada desfaz o efeito de um documento
+      // assinado pelo colaborador. Fica com quem responde pelo processo —
+      // administrador e RH — e não com o gerente da filial.
+      if (role !== "ADMIN" && role !== "RH") {
+        throw forbidden("Apenas administrador ou RH podem cancelar uma entrega já confirmada pelo colaborador.");
       }
       if (!data.motivo) {
         throw badRequest("Informe a justificativa do cancelamento (mínimo de 5 caracteres).");
@@ -767,6 +770,130 @@ deliveriesRouter.post("/:id/cancel", async (req, res, next) => {
         },
       });
     });
+
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ===================== EXCLUSÃO DEFINITIVA =====================
+//
+// Cancelar preserva a entrega como CANCELADA, com justificativa e auditoria, e é
+// o caminho normal. Excluir apaga a linha: a entrega some do histórico do
+// colaborador e levam junto a confirmação eletrônica, a foto do recebimento e a
+// ficha de papel digitalizada. Numa entrega confirmada isso apaga a prova de que
+// o EPI foi entregue, por isso só administrador e RH chegam aqui e a tela avisa
+// antes de apagar.
+//
+// O estoque volta pelos mesmos critérios do cancelamento: a entrega baixou
+// estoque ao nascer, então apagá-la sem devolver deixaria o saldo menor do que a
+// prateleira. Entrega já cancelada não devolve de novo, porque o cancelamento já
+// devolveu, e ficha importada nunca baixou nada.
+deliveriesRouter.delete("/:id", requireRole("ADMIN", "RH"), async (req, res, next) => {
+  try {
+    const { organizationId, id: userId } = req.user!;
+
+    const delivery = await prisma.delivery.findFirst({
+      where: { id: req.params.id, organizationId, ...resolveBranchFilter(req.user!) },
+      include: {
+        items: { include: { ppeItem: true, _count: { select: { ppeReturns: true, charges: true } } } },
+        confirmation: true,
+        documents: true,
+        employee: true,
+      },
+    });
+    if (!delivery) throw notFound("Entrega não encontrada.");
+
+    // Devolução e cobrança são registros de outra natureza que apontam para o
+    // item desta entrega. Apagar a entrega deixaria os dois órfãos — uma cobrança
+    // sem a entrega que a originou não se explica sozinha. Melhor recusar e dizer
+    // o que precisa ser resolvido primeiro.
+    const devolucoes = delivery.items.reduce((total, item) => total + item._count.ppeReturns, 0);
+    const cobrancas = delivery.items.reduce((total, item) => total + item._count.charges, 0);
+    if (devolucoes > 0 || cobrancas > 0) {
+      const ligados = [
+        devolucoes > 0 ? `${devolucoes} devolução(ões)` : null,
+        cobrancas > 0 ? `${cobrancas} cobrança(s)` : null,
+      ]
+        .filter(Boolean)
+        .join(" e ");
+      throw conflict(
+        `Esta entrega tem ${ligados} ligada(s) a ela e não pode ser excluída: ` +
+          `esses registros ficariam sem a entrega que os originou. Resolva-os antes, ou cancele a entrega.`
+      );
+    }
+
+    const devolveEstoque = delivery.origem !== "FICHA_IMPORTADA" && delivery.status !== "CANCELADA";
+    if (devolveEstoque && !delivery.branchId) throw badRequest("Entrega sem filial definida.");
+
+    await prisma.$transaction(async (tx) => {
+      if (devolveEstoque) {
+        for (const item of delivery.items) {
+          await applyStockMovement(tx, {
+            organizationId,
+            branchId: delivery.branchId!,
+            ppeItemId: item.ppeItemId,
+            tipo: "AJUSTE_POSITIVO",
+            quantidade: item.quantidade,
+            motivo: `Exclusão da entrega de ${delivery.employee.nomeCompleto}`,
+            referencia: delivery.id,
+            userId,
+          });
+        }
+      }
+
+      if (delivery.confirmation) {
+        await tx.electronicConfirmation.delete({ where: { id: delivery.confirmation.id } });
+      }
+      if (delivery.documents.length > 0) {
+        await tx.document.deleteMany({ where: { deliveryId: delivery.id } });
+      }
+      // Os itens caem junto por cascade, declarado no schema.
+      await tx.delivery.delete({ where: { id: delivery.id } });
+
+      // A auditoria fica com o retrato do que foi apagado: depois daqui é o
+      // único lugar onde esta entrega ainda existe.
+      await writeAuditLog(tx, {
+        organizationId,
+        userId,
+        action: "ALTERACAO",
+        entityType: "Delivery",
+        entityId: delivery.id,
+        oldData: {
+          status: delivery.status,
+          origem: delivery.origem,
+          motivo: delivery.motivo,
+          colaborador: delivery.employee.nomeCompleto,
+          cpf: delivery.employee.cpf,
+          dataFicha: delivery.dataFicha,
+          criadaEm: delivery.createdAt,
+          itens: delivery.items.map((item) => ({
+            epi: item.ppeItem.nome,
+            codigo: item.ppeItem.codigoInterno,
+            quantidade: item.quantidade,
+            dataEntrega: item.dataEntrega,
+          })),
+          confirmadoPor: delivery.confirmation?.nomeDigitado ?? null,
+          confirmadoEm: delivery.confirmation?.confirmedAt ?? null,
+          fichasAnexadas: delivery.documents.map((doc) => doc.fileName),
+        },
+        newData: {
+          excluida: true,
+          itensDevolvidosAoEstoque: devolveEstoque ? delivery.items.length : 0,
+        },
+      });
+    });
+
+    // Fora da transação, porque arquivo não tem rollback. Falhando aqui sobra um
+    // arquivo órfão no armazenamento, o que é melhor do que uma entrega que
+    // ressuscita depois de já ter sido apagada do banco.
+    if (delivery.confirmation?.photoPath) {
+      await armazenamento.remover("confirmations", delivery.confirmation.photoPath).catch(() => undefined);
+    }
+    for (const documento of delivery.documents) {
+      await armazenamento.remover("documents", documento.storagePath).catch(() => undefined);
+    }
 
     res.status(204).send();
   } catch (err) {
