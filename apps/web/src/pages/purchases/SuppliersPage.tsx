@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, Power, FileDown, FileSpreadsheet } from "lucide-react";
+import { Plus, Pencil, Power, FileDown, FileSpreadsheet, Trash2 } from "lucide-react";
 import { api, extractErrorMessage } from "../../lib/api";
 import { downloadFromApi } from "../../lib/download";
 import { Supplier, Page } from "../../types";
@@ -27,6 +27,7 @@ export default function SuppliersPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Supplier | null>(null);
   const [toggling, setToggling] = useState<Supplier | null>(null);
+  const [deleting, setDeleting] = useState<Supplier | null>(null);
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery<Page<Supplier>>({
@@ -52,6 +53,18 @@ export default function SuppliersPage() {
       toast.success("Status atualizado com sucesso.");
       queryClient.invalidateQueries({ queryKey: ["suppliers"] });
       setToggling(null);
+    },
+    onError: (err) => toast.error(extractErrorMessage(err)),
+  });
+
+  // A API recusa a exclusão de quem já tem vínculo e manda inativar. A mensagem
+  // dela é mostrada como está, sem reescrever: é ela que diz o que trava.
+  const deleteMutation = useMutation({
+    mutationFn: async () => api.delete(`/suppliers/${deleting!.id}`),
+    onSuccess: () => {
+      toast.success("Fornecedor excluído.");
+      queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+      setDeleting(null);
     },
     onError: (err) => toast.error(extractErrorMessage(err)),
   });
@@ -109,6 +122,7 @@ export default function SuppliersPage() {
                   <div className="flex justify-end gap-1">
                     <Button title="Editar fornecedor" variant="ghost" size="sm" onClick={() => openEdit(s)}><Pencil className="h-4 w-4" /></Button>
                     <Button title="Ativar ou inativar fornecedor" variant="ghost" size="sm" onClick={() => setToggling(s)}><Power className="h-4 w-4" /></Button>
+                    <Button title="Excluir fornecedor" variant="ghost" size="sm" onClick={() => setDeleting(s)}><Trash2 className="h-4 w-4 text-red-600" /></Button>
                   </div>
                 ),
               className: "text-right",
@@ -153,6 +167,17 @@ export default function SuppliersPage() {
         loading={toggleMutation.isPending}
         onConfirm={() => toggling && toggleMutation.mutate(toggling)}
         onClose={() => setToggling(null)}
+      />
+
+      <ConfirmDialog
+        open={!!deleting}
+        title="Excluir fornecedor"
+        message={`Excluir o fornecedor "${deleting?.razaoSocial}"? Isso apaga o cadastro de vez e não tem volta. Se houver compra vinculada, a exclusão será recusada: nesse caso use Inativar.`}
+        confirmLabel="Excluir"
+        tone="danger"
+        loading={deleteMutation.isPending}
+        onConfirm={() => deleting && deleteMutation.mutate()}
+        onClose={() => setDeleting(null)}
       />
     </div>
   );

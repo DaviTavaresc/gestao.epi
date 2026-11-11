@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, Power, FileDown, FileSpreadsheet, Upload } from "lucide-react";
+import { Plus, Pencil, Power, FileDown, FileSpreadsheet, Upload, Trash2 } from "lucide-react";
 import { api, extractErrorMessage } from "../../lib/api";
 import { downloadFromApi } from "../../lib/download";
 import { PpeItem, Page, PpeCategory } from "../../types";
@@ -47,6 +47,7 @@ export default function PpeItemsPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<PpeItem | null>(null);
   const [toggling, setToggling] = useState<PpeItem | null>(null);
+  const [deleting, setDeleting] = useState<PpeItem | null>(null);
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery<Page<PpeItem>>({
@@ -83,6 +84,18 @@ export default function PpeItemsPage() {
       toast.success("Status atualizado com sucesso.");
       queryClient.invalidateQueries({ queryKey: ["ppe-items"] });
       setToggling(null);
+    },
+    onError: (err) => toast.error(extractErrorMessage(err)),
+  });
+
+  // A API recusa a exclusão de quem já tem vínculo e manda inativar. A mensagem
+  // dela é mostrada como está, sem reescrever: é ela que diz o que trava.
+  const deleteMutation = useMutation({
+    mutationFn: async () => api.delete(`/ppe-items/${deleting!.id}`),
+    onSuccess: () => {
+      toast.success("EPI excluído.");
+      queryClient.invalidateQueries({ queryKey: ["ppe-items"] });
+      setDeleting(null);
     },
     onError: (err) => toast.error(extractErrorMessage(err)),
   });
@@ -194,6 +207,7 @@ export default function PpeItemsPage() {
                   <div className="flex justify-end gap-1">
                     <Button title="Editar EPI" variant="ghost" size="sm" onClick={() => openEdit(i)}><Pencil className="h-4 w-4" /></Button>
                     <Button title="Ativar ou inativar EPI" variant="ghost" size="sm" onClick={() => setToggling(i)}><Power className="h-4 w-4" /></Button>
+                    <Button title="Excluir EPI" variant="ghost" size="sm" onClick={() => setDeleting(i)}><Trash2 className="h-4 w-4 text-red-600" /></Button>
                   </div>
                 ),
               className: "text-right",
@@ -290,6 +304,17 @@ export default function PpeItemsPage() {
         loading={toggleMutation.isPending}
         onConfirm={() => toggling && toggleMutation.mutate(toggling)}
         onClose={() => setToggling(null)}
+      />
+
+      <ConfirmDialog
+        open={!!deleting}
+        title="Excluir EPI"
+        message={`Excluir o EPI "${deleting?.nome}"? Isso apaga o cadastro de vez e não tem volta. Se o EPI tiver histórico de entrega, compra, estoque, devolução ou cobrança, ou estiver em algum kit ou na Matriz Cargo x EPI, a exclusão será recusada: nesse caso use Inativar.`}
+        confirmLabel="Excluir"
+        tone="danger"
+        loading={deleteMutation.isPending}
+        onConfirm={() => deleting && deleteMutation.mutate()}
+        onClose={() => setDeleting(null)}
       />
 
       <ImportExcelModal

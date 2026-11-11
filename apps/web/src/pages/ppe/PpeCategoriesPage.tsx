@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, Power } from "lucide-react";
+import { Plus, Pencil, Power, Trash2 } from "lucide-react";
 import { api, extractErrorMessage } from "../../lib/api";
 import { PpeCategory } from "../../types";
 import { Card, CardHeader } from "../../components/ui/Card";
@@ -23,6 +23,7 @@ export default function PpeCategoriesPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<PpeCategory | null>(null);
   const [toggling, setToggling] = useState<PpeCategory | null>(null);
+  const [deleting, setDeleting] = useState<PpeCategory | null>(null);
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery<PpeCategory[]>({
@@ -50,6 +51,18 @@ export default function PpeCategoriesPage() {
       toast.success("Status atualizado com sucesso.");
       queryClient.invalidateQueries({ queryKey: ["ppe-categories"] });
       setToggling(null);
+    },
+    onError: (err) => toast.error(extractErrorMessage(err)),
+  });
+
+  // A API recusa a exclusão de quem já tem vínculo e manda inativar. A mensagem
+  // dela é mostrada como está, sem reescrever: é ela que diz o que trava.
+  const deleteMutation = useMutation({
+    mutationFn: async () => api.delete(`/ppe-categories/${deleting!.id}`),
+    onSuccess: () => {
+      toast.success("Categoria excluída.");
+      queryClient.invalidateQueries({ queryKey: ["ppe-categories"] });
+      setDeleting(null);
     },
     onError: (err) => toast.error(extractErrorMessage(err)),
   });
@@ -95,6 +108,7 @@ export default function PpeCategoriesPage() {
                   <div className="flex justify-end gap-1">
                     <Button title="Editar categoria" variant="ghost" size="sm" onClick={() => openEdit(c)}><Pencil className="h-4 w-4" /></Button>
                     <Button title="Ativar ou inativar categoria" variant="ghost" size="sm" onClick={() => setToggling(c)}><Power className="h-4 w-4" /></Button>
+                    <Button title="Excluir categoria" variant="ghost" size="sm" onClick={() => setDeleting(c)}><Trash2 className="h-4 w-4 text-red-600" /></Button>
                   </div>
                 ),
               className: "text-right",
@@ -132,6 +146,17 @@ export default function PpeCategoriesPage() {
         loading={toggleMutation.isPending}
         onConfirm={() => toggling && toggleMutation.mutate(toggling)}
         onClose={() => setToggling(null)}
+      />
+
+      <ConfirmDialog
+        open={!!deleting}
+        title="Excluir categoria"
+        message={`Excluir a categoria "${deleting?.nome}"? Isso apaga o cadastro de vez e não tem volta. Se houver EPI vinculado, a exclusão será recusada: nesse caso use Inativar.`}
+        confirmLabel="Excluir"
+        tone="danger"
+        loading={deleteMutation.isPending}
+        onConfirm={() => deleting && deleteMutation.mutate()}
+        onClose={() => setDeleting(null)}
       />
     </div>
   );

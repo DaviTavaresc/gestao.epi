@@ -22,6 +22,7 @@ export default function PpeKitsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<PpeKit | null>(null);
   const [toggling, setToggling] = useState<PpeKit | null>(null);
+  const [deleting, setDeleting] = useState<PpeKit | null>(null);
   const queryClient = useQueryClient();
 
   const { data: kits, isLoading } = useQuery<PpeKit[]>({
@@ -53,6 +54,18 @@ export default function PpeKitsPage() {
       toast.success("Status atualizado com sucesso.");
       queryClient.invalidateQueries({ queryKey: ["ppe-kits"] });
       setToggling(null);
+    },
+    onError: (err) => toast.error(extractErrorMessage(err)),
+  });
+
+  // A API recusa a exclusão de quem já tem vínculo e manda inativar. A mensagem
+  // dela é mostrada como está, sem reescrever: é ela que diz o que trava.
+  const deleteMutation = useMutation({
+    mutationFn: async () => api.delete(`/ppe-kits/${deleting!.id}`),
+    onSuccess: () => {
+      toast.success("Kit excluído.");
+      queryClient.invalidateQueries({ queryKey: ["ppe-kits"] });
+      setDeleting(null);
     },
     onError: (err) => toast.error(extractErrorMessage(err)),
   });
@@ -102,6 +115,7 @@ export default function PpeKitsPage() {
                   <div className="flex gap-2">
                     <Button variant="outline" size="sm" onClick={() => openEdit(kit)}><Pencil className="h-4 w-4" /> Editar</Button>
                     <Button title="Ativar ou inativar kit" variant="ghost" size="sm" onClick={() => setToggling(kit)}><Power className="h-4 w-4" /></Button>
+                    <Button title="Excluir kit" variant="ghost" size="sm" onClick={() => setDeleting(kit)}><Trash2 className="h-4 w-4 text-red-600" /></Button>
                   </div>
                 )}
               </CardBody>
@@ -157,6 +171,17 @@ export default function PpeKitsPage() {
         loading={toggleMutation.isPending}
         onConfirm={() => toggling && toggleMutation.mutate(toggling)}
         onClose={() => setToggling(null)}
+      />
+
+      <ConfirmDialog
+        open={!!deleting}
+        title="Excluir kit"
+        message={`Excluir o kit "${deleting?.nome}"? Isso apaga o kit e a lista de EPIs dele de vez, e não tem volta. As entregas já feitas a partir deste kit não são afetadas.`}
+        confirmLabel="Excluir"
+        tone="danger"
+        loading={deleteMutation.isPending}
+        onConfirm={() => deleting && deleteMutation.mutate()}
+        onClose={() => setDeleting(null)}
       />
     </div>
   );

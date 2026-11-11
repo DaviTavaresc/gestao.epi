@@ -139,11 +139,20 @@ positionsRouter.delete("/:id", async (req, res, next) => {
     const { organizationId } = req.user!;
     const existing = await prisma.position.findFirst({
       where: { id: req.params.id, organizationId },
-      include: { _count: { select: { employees: true } } },
+      include: { _count: { select: { employees: true, requirements: true } } },
     });
     if (!existing) throw notFound("Cargo não encontrado.");
     if (existing._count.employees > 0) {
       throw badRequest("Não é possível excluir um cargo com colaboradores vinculados. Inative-o em vez disso.");
+    }
+    // A Matriz Cargo x EPI aponta para o cargo. Sem esta conferência o banco
+    // recusaria a exclusão por chave estrangeira e o usuário veria um erro
+    // genérico, sem saber que o caminho é limpar a matriz antes.
+    if (existing._count.requirements > 0) {
+      throw badRequest(
+        `Este cargo tem ${existing._count.requirements} EPI(s) na Matriz Cargo x EPI. ` +
+          `Remova as exigências da matriz antes de excluir o cargo, ou inative-o.`
+      );
     }
     await prisma.position.delete({ where: { id: existing.id } });
     res.status(204).send();

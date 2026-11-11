@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, Power, FileDown, FileSpreadsheet } from "lucide-react";
+import { Plus, Pencil, Power, FileDown, FileSpreadsheet, Trash2 } from "lucide-react";
 import { api, extractErrorMessage } from "../../lib/api";
 import { downloadFromApi } from "../../lib/download";
 import { Position, Page } from "../../types";
@@ -27,6 +27,7 @@ export default function PositionsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Position | null>(null);
   const [toggling, setToggling] = useState<Position | null>(null);
+  const [deleting, setDeleting] = useState<Position | null>(null);
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery<Page<Position>>({
@@ -54,6 +55,18 @@ export default function PositionsPage() {
       toast.success("Status atualizado com sucesso.");
       queryClient.invalidateQueries({ queryKey: ["positions"] });
       setToggling(null);
+    },
+    onError: (err) => toast.error(extractErrorMessage(err)),
+  });
+
+  // A API recusa a exclusão de quem já tem vínculo e manda inativar. A mensagem
+  // dela é mostrada como está, sem reescrever: é ela que diz o que trava.
+  const deleteMutation = useMutation({
+    mutationFn: async () => api.delete(`/positions/${deleting!.id}`),
+    onSuccess: () => {
+      toast.success("Cargo excluído.");
+      queryClient.invalidateQueries({ queryKey: ["positions"] });
+      setDeleting(null);
     },
     onError: (err) => toast.error(extractErrorMessage(err)),
   });
@@ -117,6 +130,9 @@ export default function PositionsPage() {
                     <Button title="Ativar ou inativar cargo" variant="ghost" size="sm" onClick={() => setToggling(p)}>
                       <Power className="h-4 w-4" />
                     </Button>
+                    <Button title="Excluir cargo" variant="ghost" size="sm" onClick={() => setDeleting(p)}>
+                      <Trash2 className="h-4 w-4 text-red-600" />
+                    </Button>
                   </div>
                 ),
               className: "text-right",
@@ -155,6 +171,17 @@ export default function PositionsPage() {
         loading={toggleMutation.isPending}
         onConfirm={() => toggling && toggleMutation.mutate(toggling)}
         onClose={() => setToggling(null)}
+      />
+
+      <ConfirmDialog
+        open={!!deleting}
+        title="Excluir cargo"
+        message={`Excluir o cargo "${deleting?.nome}"? Isso apaga o cadastro de vez e não tem volta. Se houver colaborador vinculado ou EPI na Matriz Cargo x EPI, a exclusão será recusada: nesse caso use Inativar, que tira o cargo do uso e preserva o histórico.`}
+        confirmLabel="Excluir"
+        tone="danger"
+        loading={deleteMutation.isPending}
+        onConfirm={() => deleting && deleteMutation.mutate()}
+        onClose={() => setDeleting(null)}
       />
     </div>
   );

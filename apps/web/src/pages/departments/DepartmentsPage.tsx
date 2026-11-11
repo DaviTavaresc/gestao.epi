@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, Power, FileDown, FileSpreadsheet } from "lucide-react";
+import { Plus, Pencil, Power, FileDown, FileSpreadsheet, Trash2 } from "lucide-react";
 import { api, extractErrorMessage } from "../../lib/api";
 import { downloadFromApi } from "../../lib/download";
 import { Department, Page } from "../../types";
@@ -27,6 +27,7 @@ export default function DepartmentsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Department | null>(null);
   const [toggling, setToggling] = useState<Department | null>(null);
+  const [deleting, setDeleting] = useState<Department | null>(null);
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery<Page<Department>>({
@@ -54,6 +55,18 @@ export default function DepartmentsPage() {
       toast.success("Status atualizado com sucesso.");
       queryClient.invalidateQueries({ queryKey: ["departments"] });
       setToggling(null);
+    },
+    onError: (err) => toast.error(extractErrorMessage(err)),
+  });
+
+  // A API recusa a exclusão de quem já tem vínculo e manda inativar. A mensagem
+  // dela é mostrada como está, sem reescrever: é ela que diz o que trava.
+  const deleteMutation = useMutation({
+    mutationFn: async () => api.delete(`/departments/${deleting!.id}`),
+    onSuccess: () => {
+      toast.success("Setor excluído.");
+      queryClient.invalidateQueries({ queryKey: ["departments"] });
+      setDeleting(null);
     },
     onError: (err) => toast.error(extractErrorMessage(err)),
   });
@@ -114,6 +127,9 @@ export default function DepartmentsPage() {
                     <Button title="Ativar ou inativar setor" variant="ghost" size="sm" onClick={() => setToggling(d)}>
                       <Power className="h-4 w-4" />
                     </Button>
+                    <Button title="Excluir setor" variant="ghost" size="sm" onClick={() => setDeleting(d)}>
+                      <Trash2 className="h-4 w-4 text-red-600" />
+                    </Button>
                   </div>
                 ),
               className: "text-right",
@@ -153,6 +169,17 @@ export default function DepartmentsPage() {
         loading={toggleMutation.isPending}
         onConfirm={() => toggling && toggleMutation.mutate(toggling)}
         onClose={() => setToggling(null)}
+      />
+
+      <ConfirmDialog
+        open={!!deleting}
+        title="Excluir setor"
+        message={`Excluir o setor "${deleting?.nome}"? Isso apaga o cadastro de vez e não tem volta. Se houver colaborador vinculado, a exclusão será recusada: nesse caso use Inativar, que tira o setor do uso e preserva o histórico.`}
+        confirmLabel="Excluir"
+        tone="danger"
+        loading={deleteMutation.isPending}
+        onConfirm={() => deleting && deleteMutation.mutate()}
+        onClose={() => setDeleting(null)}
       />
     </div>
   );

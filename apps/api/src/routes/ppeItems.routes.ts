@@ -253,11 +253,42 @@ ppeItemsRouter.delete("/:id", async (req, res, next) => {
     const { organizationId } = req.user!;
     const existing = await prisma.ppeItem.findFirst({
       where: { id: req.params.id, organizationId },
-      include: { _count: { select: { deliveryItems: true, purchaseItems: true } } },
+      include: {
+        _count: {
+          select: {
+            deliveryItems: true,
+            purchaseItems: true,
+            stockMovements: true,
+            ppeReturns: true,
+            charges: true,
+            kitItems: true,
+            requirements: true,
+          },
+        },
+      },
     });
     if (!existing) throw notFound("EPI não encontrado.");
-    if (existing._count.deliveryItems > 0 || existing._count.purchaseItems > 0) {
-      throw badRequest("Não é possível excluir um EPI com histórico de entregas ou compras. Inative-o em vez disso.");
+
+    // Duas recusas diferentes de propósito: histórico não se apaga, mas kit e
+    // matriz são cadastro — dá para tirar o EPI de lá e excluir depois. Sem
+    // conferir tudo o que aponta para o EPI, o banco recusaria por chave
+    // estrangeira e o usuário veria um erro genérico.
+    const c = existing._count;
+    const historico = c.deliveryItems + c.purchaseItems + c.stockMovements + c.ppeReturns + c.charges;
+    if (historico > 0) {
+      throw badRequest(
+        "Não é possível excluir um EPI com histórico de entregas, compras, movimentações de estoque, " +
+          "devoluções ou cobranças. Inative-o em vez disso."
+      );
+    }
+    if (c.kitItems > 0 || c.requirements > 0) {
+      const onde = [
+        c.kitItems > 0 ? `${c.kitItems} kit(s)` : null,
+        c.requirements > 0 ? `${c.requirements} cargo(s) da Matriz Cargo x EPI` : null,
+      ]
+        .filter(Boolean)
+        .join(" e em ");
+      throw badRequest(`Este EPI está em ${onde}. Tire-o de lá antes de excluir, ou inative-o.`);
     }
     await prisma.$transaction([
       prisma.branchStock.deleteMany({ where: { ppeItemId: existing.id } }),

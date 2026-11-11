@@ -142,14 +142,44 @@ branchesRouter.delete("/:id", requireRole("ADMIN"), async (req, res, next) => {
     const { organizationId } = req.user!;
     const existing = await prisma.branch.findFirst({
       where: { id: req.params.id, organizationId },
-      include: { _count: { select: { employees: true, deliveries: true, stockMovements: true } } },
+      include: {
+        _count: {
+          select: {
+            employees: true,
+            contractEmployees: true,
+            users: true,
+            deliveries: true,
+            stockMovements: true,
+            purchases: true,
+            charges: true,
+          },
+        },
+      },
     });
     if (!existing) throw notFound("Filial não encontrada.");
-    if (existing._count.employees > 0 || existing._count.deliveries > 0 || existing._count.stockMovements > 0) {
-      throw badRequest("Esta filial possui histórico vinculado e não pode ser excluída. Inative-a em vez disso.");
+
+    // Oito tabelas apontam para a filial, não três. Faltando conferir o usuário
+    // com acesso restrito a ela, o colaborador cujo contrato é dela e as compras
+    // e cobranças, o banco recusaria por chave estrangeira e o usuário veria um
+    // erro genérico no lugar de uma explicação.
+    const c = existing._count;
+    const vinculos =
+      c.employees + c.contractEmployees + c.users + c.deliveries + c.stockMovements + c.purchases + c.charges;
+    if (vinculos > 0) {
+      throw badRequest(
+        "Esta filial tem colaboradores, acessos, entregas, estoque, compras ou cobranças vinculados " +
+          "e não pode ser excluída. Inative-a em vez disso: ela sai do uso e o histórico fica intacto."
+      );
     }
-    await prisma.branchStock.deleteMany({ where: { branchId: existing.id } });
-    await prisma.branch.delete({ where: { id: existing.id } });
+
+    // O estoque zerado e os alertas da filial são dados derivados: nascem do
+    // cadastro, não do histórico, e vão junto. Chegando aqui não existe nem um
+    // nem outro com movimento por trás, porque as contagens acima deram zero.
+    await prisma.$transaction([
+      prisma.alert.deleteMany({ where: { branchId: existing.id } }),
+      prisma.branchStock.deleteMany({ where: { branchId: existing.id } }),
+      prisma.branch.delete({ where: { id: existing.id } }),
+    ]);
     res.status(204).send();
   } catch (err) {
     next(err);
