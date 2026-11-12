@@ -6,6 +6,8 @@ import { requireRole } from "../middleware/rbac";
 import { badRequest, conflict, notFound } from "../utils/httpError";
 import { writeAuditLog } from "../utils/audit";
 import { allowedBranchIds, canAccessAllBranches } from "../utils/branchScope";
+import { armazenamento } from "../utils/storage";
+import { excluirFilialEmCascata, levantarImpacto, somarImpacto } from "../utils/excluirFilial";
 
 export const branchesRouter = Router();
 branchesRouter.use(requireAuth);
@@ -214,61 +216,88 @@ branchesRouter.patch("/:id/status", requireRole("ADMIN", "RH"), async (req, res,
   }
 });
 
-branchesRouter.delete("/:id", requireRole("ADMIN", "RH"), async (req, res, next) => {
+// Prévia da exclusão: quanto some junto. A tela mostra esses números antes de
+// pedir a confirmação, porque "excluir a empresa" não diz nada sobre apagar o
+// histórico de entrega de 69 pessoas — os números dizem.
+branchesRouter.get("/:id/impacto", requireRole("ADMIN", "RH"), async (req, res, next) => {
   try {
     const { organizationId } = req.user!;
-    const existing = await prisma.branch.findFirst({
-      where: { id: req.params.id, organizationId },
-      include: {
-        _count: {
-          select: {
-            employees: true,
-            contractEmployees: true,
-            users: true,
-            deliveries: true,
-            stockMovements: true,
-            purchases: true,
-            charges: true,
-            filiais: true,
+    const existing = await prisma.branch.findFirst({ where: { id: req.params.id, organizationId } });
+    if (!existing) throw notFound("Cadastro não encontrado.");
+
+    const detalhe = await levantarImpacto(prisma, existing.id);
+    res.json({ ...detalhe, totais: somarImpacto(detalhe) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Exclusão definitiva de uma empresa ou filial, com tudo que depende dela:
+// colaboradores lotados nela, entregas, termos assinados, devoluções,
+// cobranças, compras, movimentações e estoque. As filiais de uma empresa saem
+// junto. Não tem volta e apaga prova legal de entrega de EPI — por isso exige
+// digitar o nome exato e está restrita a ADMIN e RH.
+//
+// O que não some: a conta de acesso, que é desvinculada e inativada, e o
+// colaborador que só tinha contrato com esta empresa mas trabalha em outra
+// filial, que apenas perde o vínculo. O porquê está em utils/excluirFilial.ts.
+branchesRouter.delete("/:id", requireRole("ADMIN", "RH"), async (req, res, next) => {
+  try {
+    const { organizationId, id: userId } = req.user!;
+    const existing = await prisma.branch.findFirst({ where: { id: req.params.id, organizationId } });
+    if (!existing) throw notFound("Cadastro não encontrado.");
+
+    // A confirmação vem no corpo porque o DELETE é disparado por um clique e
+    // o clique sozinho não prova que a pessoa leu o que ia acontecer.
+    const { confirmacao } = z
+      .object({ confirmacao: z.string().optional() })
+      .parse(req.body ?? {});
+    if ((confirmacao ?? "").trim() !== existing.nome) {
+      throw badRequest(
+        `Para excluir, digite o nome exato do cadastro: "${existing.nome}". ` +
+          "Esta exclusão apaga o histórico de entregas vinculado e não tem volta."
+      );
+    }
+
+    const impacto = await levantarImpacto(prisma, existing.id);
+    const totais = somarImpacto(impacto);
+
+    // Tudo numa transação só: uma exclusão pela metade deixaria entrega sem
+    // colaborador e estoque sem filial. O tempo é alargado porque uma empresa
+    // grande tem milhares de linhas para apagar, e o padrão do Prisma (5s)
+    // abortaria no meio.
+    const arquivos = await prisma.$transaction(
+      async (tx) => {
+        const removidos = await excluirFilialEmCascata(tx, existing.id);
+        // A auditoria é gravada dentro da transação e guarda a contagem do que
+        // saiu: depois disso não existe mais nenhum registro para consultar.
+        await writeAuditLog(tx, {
+          organizationId,
+          userId,
+          // O enum de auditoria nao tem EXCLUSAO; o codigo ja usa ALTERACAO
+          // para apagar entrega. O que marca a exclusao e newData.excluida.
+          action: "ALTERACAO",
+          entityType: "Branch",
+          entityId: existing.id,
+          oldData: {
+            nome: existing.nome,
+            cnpj: existing.cnpj,
+            parentId: existing.parentId,
+            filiaisExcluidas: impacto.filiais.map((f) => f.nome),
           },
-        },
+          newData: { excluida: true, ...totais },
+        });
+        return removidos;
       },
-    });
-    if (!existing) throw notFound("Filial não encontrada.");
+      { timeout: 120_000, maxWait: 20_000 }
+    );
 
-    // Apagar a empresa deixaria as filiais dela penduradas num CNPJ que não
-    // existe mais. O banco já recusaria pela chave estrangeira; aqui a recusa
-    // vem com o motivo e o caminho.
-    if (existing._count.filiais > 0) {
-      throw badRequest(
-        `Esta empresa tem ${existing._count.filiais} filial(is) vinculada(s). ` +
-          "Exclua ou mova as filiais antes de excluir a empresa."
-      );
-    }
+    // Arquivos só depois do commit: remoção de arquivo não tem rollback.
+    await Promise.all(
+      arquivos.map((a) => armazenamento.remover(a.pasta, a.nome).catch(() => undefined))
+    );
 
-    // Oito tabelas apontam para a filial, não três. Faltando conferir o usuário
-    // com acesso restrito a ela, o colaborador cujo contrato é dela e as compras
-    // e cobranças, o banco recusaria por chave estrangeira e o usuário veria um
-    // erro genérico no lugar de uma explicação.
-    const c = existing._count;
-    const vinculos =
-      c.employees + c.contractEmployees + c.users + c.deliveries + c.stockMovements + c.purchases + c.charges;
-    if (vinculos > 0) {
-      throw badRequest(
-        "Esta filial tem colaboradores, acessos, entregas, estoque, compras ou cobranças vinculados " +
-          "e não pode ser excluída. Inative-a em vez disso: ela sai do uso e o histórico fica intacto."
-      );
-    }
-
-    // O estoque zerado e os alertas da filial são dados derivados: nascem do
-    // cadastro, não do histórico, e vão junto. Chegando aqui não existe nem um
-    // nem outro com movimento por trás, porque as contagens acima deram zero.
-    await prisma.$transaction([
-      prisma.alert.deleteMany({ where: { branchId: existing.id } }),
-      prisma.branchStock.deleteMany({ where: { branchId: existing.id } }),
-      prisma.branch.delete({ where: { id: existing.id } }),
-    ]);
-    res.status(204).send();
+    res.json({ excluida: existing.nome, filiais: impacto.filiais.map((f) => f.nome), ...totais });
   } catch (err) {
     next(err);
   }

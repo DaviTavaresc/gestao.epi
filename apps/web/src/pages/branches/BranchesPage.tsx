@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Pencil, Power, Building2, Store, FileDown, FileSpreadsheet, Trash2 } from "lucide-react";
 import { api, extractErrorMessage } from "../../lib/api";
 import { downloadFromApi } from "../../lib/download";
-import { Branch } from "../../types";
+import { Branch, ImpactoDaExclusao } from "../../types";
 import { Card, CardHeader } from "../../components/ui/Card";
 import { DataTable } from "../../components/ui/DataTable";
 import { Button } from "../../components/ui/Button";
@@ -35,6 +35,7 @@ export default function BranchesPage() {
   const [editing, setEditing] = useState<Branch | null>(null);
   const [toggling, setToggling] = useState<Branch | null>(null);
   const [deleting, setDeleting] = useState<Branch | null>(null);
+  const [confirmacao, setConfirmacao] = useState("");
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery<Branch[]>({
@@ -76,17 +77,30 @@ export default function BranchesPage() {
     onError: (err) => toast.error(extractErrorMessage(err)),
   });
 
-  // A API recusa a exclusão de quem já tem vínculo e manda inativar. A mensagem
-  // dela é mostrada como está, sem reescrever: é ela que diz o que trava.
+  // Prévia do estrago, buscada só quando o diálogo abre. É ela que transforma
+  // "excluir a empresa" em "apagar a entrega de 69 pessoas".
+  const { data: impacto, isLoading: carregandoImpacto } = useQuery<ImpactoDaExclusao>({
+    queryKey: ["branch-impacto", deleting?.id],
+    queryFn: async () => (await api.get(`/branches/${deleting!.id}/impacto`)).data,
+    enabled: !!deleting,
+  });
+
+  // A confirmação digitada viaja no corpo do DELETE: a API recusa se não bater
+  // com o nome exato. A trava é dela, não da tela — o botão aqui é só o gatilho.
   const deleteMutation = useMutation({
-    mutationFn: async () => api.delete(`/branches/${deleting!.id}`),
+    mutationFn: async () => api.delete(`/branches/${deleting!.id}`, { data: { confirmacao } }),
     onSuccess: () => {
-      toast.success("Cadastro excluído.");
-      queryClient.invalidateQueries({ queryKey: ["branches"] });
+      toast.success(`"${deleting?.nome}" foi excluído junto com tudo que dependia dele.`);
+      queryClient.invalidateQueries();
       setDeleting(null);
     },
     onError: (err) => toast.error(extractErrorMessage(err)),
   });
+
+  function abrirExclusao(branch: Branch) {
+    setConfirmacao("");
+    setDeleting(branch);
+  }
 
   function openCreate() {
     setEditing(null);
@@ -189,7 +203,7 @@ export default function BranchesPage() {
                     <Button title="Ativar ou inativar" variant="ghost" size="sm" onClick={() => setToggling(b)}>
                       <Power className="h-4 w-4" />
                     </Button>
-                    <Button title="Excluir cadastro" variant="ghost" size="sm" onClick={() => setDeleting(b)}>
+                    <Button title="Excluir cadastro" variant="ghost" size="sm" onClick={() => abrirExclusao(b)}>
                       <Trash2 className="h-4 w-4 text-red-600" />
                     </Button>
                   </div>
@@ -281,16 +295,108 @@ export default function BranchesPage() {
         onClose={() => setToggling(null)}
       />
 
-      <ConfirmDialog
+      <Modal
         open={!!deleting}
-        title={deleting?.parentId ? "Excluir filial" : "Excluir empresa"}
-        message={`Excluir "${deleting?.nome}"? Isso apaga o cadastro de vez e não tem volta. Se houver colaborador, acesso, entrega, estoque, compra, cobrança — ou, no caso de uma empresa, filiais vinculadas —, a exclusão será recusada: nesse caso use Inativar, que tira o cadastro do uso e preserva o histórico.`}
-        confirmLabel="Excluir"
-        tone="danger"
-        loading={deleteMutation.isPending}
-        onConfirm={() => deleting && deleteMutation.mutate()}
         onClose={() => setDeleting(null)}
-      />
+        title={deleting?.parentId ? "Excluir filial" : "Excluir empresa"}
+        size="lg"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setDeleting(null)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="danger"
+              disabled={confirmacao.trim() !== deleting?.nome}
+              loading={deleteMutation.isPending}
+              onClick={() => deleteMutation.mutate()}
+            >
+              Excluir definitivamente
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <InlineBanner tone="error">
+            Isto apaga o cadastro e <strong>todo o histórico ligado a ele</strong>, inclusive os termos de
+            entrega assinados. Não tem volta e não há backup dentro do sistema. Para só tirar de uso sem
+            perder nada, feche aqui e use <strong>Inativar</strong>.
+          </InlineBanner>
+
+          {carregandoImpacto && <p className="text-sm text-slate-500">Levantando o que será apagado...</p>}
+
+          {impacto && (
+            <div className="space-y-3">
+              {impacto.filiais.length > 0 && (
+                <p className="text-sm text-slate-700">
+                  Sai junto {impacto.filiais.length === 1 ? "a filial" : "as filiais"}:{" "}
+                  <strong>{impacto.filiais.map((f) => f.nome).join(", ")}</strong>.
+                </p>
+              )}
+
+              <div className="rounded-lg border border-slate-200">
+                <p className="border-b border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-slate-500">
+                  Será apagado
+                </p>
+                <ul className="divide-y divide-slate-100 text-sm">
+                  {[
+                    ["Colaboradores lotados aqui", impacto.totais.colaboradores],
+                    ["Entregas (com os termos assinados)", impacto.totais.entregas],
+                    ["Devoluções", impacto.totais.devolucoes],
+                    ["Cobranças", impacto.totais.cobrancas],
+                    ["Movimentações de estoque", impacto.totais.movimentacoes],
+                    ["EPIs em estoque", impacto.totais.itensEmEstoque],
+                    ["Compras", impacto.totais.compras],
+                    ["Arquivos anexados (fichas e fotos)", impacto.totais.documentos],
+                  ]
+                    .filter(([, n]) => (n as number) > 0)
+                    .map(([rotulo, n]) => (
+                      <li key={rotulo as string} className="flex justify-between px-3 py-1.5">
+                        <span className="text-slate-600">{rotulo}</span>
+                        <strong className="text-red-700">{n as number}</strong>
+                      </li>
+                    ))}
+                  {Object.values(impacto.totais).every((n) => n === 0) && (
+                    <li className="px-3 py-2 text-slate-500">Nada vinculado — este cadastro está vazio.</li>
+                  )}
+                </ul>
+              </div>
+
+              {(impacto.totais.usuariosDesvinculados > 0 || impacto.totais.contratosDesvinculados > 0) && (
+                <div className="rounded-lg border border-slate-200">
+                  <p className="border-b border-slate-200 px-3 py-2 text-xs font-semibold uppercase text-slate-500">
+                    Não será apagado, só desvinculado
+                  </p>
+                  <ul className="divide-y divide-slate-100 text-sm">
+                    {impacto.totais.usuariosDesvinculados > 0 && (
+                      <li className="px-3 py-1.5 text-slate-600">
+                        <strong>{impacto.totais.usuariosDesvinculados}</strong> acesso(s) de usuário — a conta
+                        continua existindo, perde a filial e fica <strong>inativa</strong>.
+                      </li>
+                    )}
+                    {impacto.totais.contratosDesvinculados > 0 && (
+                      <li className="px-3 py-1.5 text-slate-600">
+                        <strong>{impacto.totais.contratosDesvinculados}</strong> colaborador(es) de outra filial que
+                        tinham contrato com esta empresa — o cadastro fica, só perde o vínculo de contrato.
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {deleteMutation.isError && <InlineBanner tone="error">{extractErrorMessage(deleteMutation.error)}</InlineBanner>}
+
+          <Input
+            label={`Para confirmar, digite o nome exato: ${deleting?.nome ?? ""}`}
+            value={confirmacao}
+            onChange={(e) => setConfirmacao(e.target.value)}
+            placeholder={deleting?.nome ?? ""}
+            autoComplete="off"
+          />
+        </div>
+      </Modal>
     </div>
   );
 }

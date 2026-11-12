@@ -336,3 +336,27 @@ export type Organization = {
   alertDaysProximo: number;
   exigirFotoConfirmacao: boolean;
 };
+
+// Previa da exclusao em cascata de uma empresa ou filial: quanto some junto.
+export type TotaisDaExclusao = {
+  colaboradores: number;
+  contratosDesvinculados: number;
+  usuariosDesvinculados: number;
+  entregas: number;
+  devolucoes: number;
+  cobrancas: number;
+  movimentacoes: number;
+  itensEmEstoque: number;
+  compras: number;
+  documentos: number;
+  alertas: number;
+};
+
+export type ImpactoDaExclusao = TotaisDaExclusao & {
+  id: string;
+  nome: string;
+  ehEmpresa: boolean;
+  filiais: ImpactoDaExclusao[];
+  // Soma da empresa com as filiais dela.
+  totais: TotaisDaExclusao;
+};
