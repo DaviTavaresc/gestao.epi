@@ -8,17 +8,18 @@ import { forbidden } from "./httpError";
 // - ADMIN e DIRETORIA enxergam todas as empresas do grupo, sempre. A diretoria
 //   acompanha o conjunto; prendê-la a uma filial esvaziaria o perfil, mesmo que
 //   alguém vincule uma filial ao usuário dela por engano.
-// - Usuário sem filial definida também enxerga todas (perfil matriz / corporativo).
-// - Demais usuários ficam restritos à própria filial e, se estiverem ligados a
-//   uma empresa, às filiais dela. É o caso do GERENTE: ligado a uma loja, vê a
-//   loja; ligado ao CNPJ, vê as lojas daquele CNPJ.
+// - Usuário sem nenhuma filial vinculada também enxerga todas (perfil matriz /
+//   corporativo).
+// - Demais usuários ficam restritos às filiais vinculadas a eles e às filiais
+//   abaixo de cada uma. É o caso do GERENTE: vinculado a uma loja, vê a loja;
+//   a três lojas, vê as três; ao CNPJ, vê as lojas daquele CNPJ.
 export function canAccessAllBranches(user: AuthenticatedUser): boolean {
-  return user.role === "ADMIN" || user.role === "DIRETORIA" || user.branchId === null;
+  return user.role === "ADMIN" || user.role === "DIRETORIA" || user.branchIds === null;
 }
 
 // Filiais que o usuário alcança. Usado por quem precisa da lista crua.
 export function allowedBranchIds(user: AuthenticatedUser): string[] {
-  return user.branchIds ?? (user.branchId ? [user.branchId] : []);
+  return user.branchIds ?? [];
 }
 
 // Filtro Prisma para o campo branchId. Um usuário de escopo restrito pode

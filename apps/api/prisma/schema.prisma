@@ -239,7 +239,7 @@ model Branch {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users             User[]
+  users             UserBranch[]
   employees         Employee[]       @relation("EmployeeWorkBranch")
   contractEmployees Employee[]       @relation("EmployeeContractBranch")
   stocks            BranchStock[]
@@ -285,9 +285,6 @@ model User {
   id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
-  // Filial do usuário. Nulo = acesso a todas as filiais (perfil matriz / administrador).
-  branchId       String?
-  branch         Branch?      @relation(fields: [branchId], references: [id])
   name           String
   email          String       @unique
   passwordHash   String
@@ -298,6 +295,11 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Filiais que o usuário responde. Lista vazia = acesso a todas as filiais da
+  // organização (perfil matriz / corporativo). Um gerente que cuida de três
+  // lojas tem três linhas aqui; vinculado a uma empresa, alcança as filiais
+  // dela sem precisar listar uma a uma.
+  branches             UserBranch[]
   refreshTokens        RefreshToken[]
   passwordResetTokens  PasswordResetToken[]
   notifications        Notification[]
@@ -313,6 +315,26 @@ model User {
 
   @@index([organizationId])
   @@map("users")
+}
+
+// Um usuário responde por quantas filiais for preciso, e uma filial tem
+// quantos responsáveis forem necessários. Era uma coluna só no usuário, o que
+// nao dava conta do gerente que cuida de mais de uma loja.
+//
+// Vale como lista de PONTOS DE PARTIDA, não como lista fechada: o alcance real
+// é calculado na autenticação, somando a cada filial listada as filiais abaixo
+// dela. Vincular alguém a uma empresa dá as lojas dela de uma vez.
+model UserBranch {
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([userId, branchId])
+  @@index([branchId])
+  @@map("user_branches")
 }
 
 model RefreshToken {

@@ -15,10 +15,11 @@ import { InlineBanner } from "../../components/ui/Feedback";
 import { roleLabel, Role } from "../../stores/authStore";
 import { toast } from "../../stores/toastStore";
 import { useBranches } from "../../hooks/useBranches";
+import { BranchChecklist } from "../../components/BranchChecklist";
 import { usePermissions } from "../../hooks/usePermissions";
 
-type CreateFormData = { name: string; email: string; password: string; role: Role; branchId?: string };
-type EditFormData = { name: string; role: Role; branchId?: string };
+type CreateFormData = { name: string; email: string; password: string; role: Role };
+type EditFormData = { name: string; role: Role };
 
 export default function UsersPage() {
   // O RH administra os acessos da equipe junto com o administrador. O que ele
@@ -34,6 +35,10 @@ export default function UsersPage() {
   const [resettingPw, setResettingPw] = useState<OrgUser | null>(null);
   const [deleting, setDeleting] = useState<OrgUser | null>(null);
   const [newPassword, setNewPassword] = useState("");
+  // As filiais ficam fora do react-hook-form: sao uma lista marcada a mao, nao
+  // um campo de formulario, e o componente de selecao ja devolve o array pronto.
+  const [filiaisDoNovo, setFiliaisDoNovo] = useState<string[]>([]);
+  const [filiaisDoEditado, setFiliaisDoEditado] = useState<string[]>([]);
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery<OrgUser[]>({ queryKey: ["users"], queryFn: async () => (await api.get("/users")).data });
@@ -43,7 +48,7 @@ export default function UsersPage() {
   const editForm = useForm<EditFormData>();
 
   const createMutation = useMutation({
-    mutationFn: async (values: CreateFormData) => api.post("/users", values),
+    mutationFn: async (values: CreateFormData) => api.post("/users", { ...values, branchIds: filiaisDoNovo }),
     onSuccess: () => {
       toast.success("Usuário criado com sucesso.");
       queryClient.invalidateQueries({ queryKey: ["users"] });
@@ -53,7 +58,7 @@ export default function UsersPage() {
   });
 
   const editMutation = useMutation({
-    mutationFn: async (values: EditFormData) => api.put(`/users/${editing!.id}`, values),
+    mutationFn: async (values: EditFormData) => api.put(`/users/${editing!.id}`, { ...values, branchIds: filiaisDoEditado }),
     onSuccess: () => {
       toast.success("Usuário atualizado com sucesso.");
       queryClient.invalidateQueries({ queryKey: ["users"] });
@@ -106,7 +111,7 @@ export default function UsersPage() {
               : "Gerencie os acessos da equipe. Contas de administrador só outro administrador altera."}
           </p>
         </div>
-        <Button onClick={() => { createForm.reset({ name: "", email: "", password: "", role: "CONSULTA", branchId: "" }); setCreateOpen(true); }}>
+        <Button onClick={() => { createForm.reset({ name: "", email: "", password: "", role: "CONSULTA" }); setFiliaisDoNovo([]); setCreateOpen(true); }}>
           <Plus className="h-4 w-4" /> Novo usuário
         </Button>
       </div>
@@ -119,8 +124,19 @@ export default function UsersPage() {
             { header: "E-mail", cell: (u) => u.email },
             { header: "Perfil", cell: (u) => <Badge tone="navy">{roleLabel(u.role)}</Badge> },
             {
-              header: "Filial",
-              cell: (u) => (u.branch ? u.branch.nome : <span className="text-slate-400">Todas</span>),
+              header: "Filiais",
+              cell: (u) =>
+                !u.branches || u.branches.length === 0 ? (
+                  <span className="text-slate-400">Todas</span>
+                ) : u.branches.length <= 2 ? (
+                  u.branches.map((b) => b.nome).join(", ")
+                ) : (
+                  // Mais que duas nao cabe na coluna sem quebrar a tabela; o
+                  // nome completo de cada uma fica no title, ao passar o mouse.
+                  <span title={u.branches.map((b) => b.nome).join(", ")}>
+                    {u.branches[0].nome} <span className="text-slate-500">+{u.branches.length - 1}</span>
+                  </span>
+                ),
             },
             { header: "Status", cell: (u) => <StatusBadge status={u.status} /> },
             { header: "Último login", cell: (u) => (u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString("pt-BR") : "Nunca") },
@@ -133,7 +149,7 @@ export default function UsersPage() {
                         <span className="text-xs text-slate-400">Administrador</span>
                       ) : (
                       <div className="flex justify-end gap-1">
-                        <Button title="Editar usuário" variant="ghost" size="sm" onClick={() => { editForm.reset({ name: u.name, role: u.role, branchId: u.branchId ?? "" }); setEditing(u); }}><Pencil className="h-4 w-4" /></Button>
+                        <Button title="Editar usuário" variant="ghost" size="sm" onClick={() => { editForm.reset({ name: u.name, role: u.role }); setFiliaisDoEditado((u.branches ?? []).map((b) => b.id)); setEditing(u); }}><Pencil className="h-4 w-4" /></Button>
                         <Button title="Redefinir senha" variant="ghost" size="sm" onClick={() => setResettingPw(u)}><KeyRound className="h-4 w-4" /></Button>
                         <Button title="Ativar ou inativar usuário" variant="ghost" size="sm" onClick={() => setToggling(u)}><Power className="h-4 w-4" /></Button>
                         <Button title="Excluir acesso" variant="ghost" size="sm" onClick={() => setDeleting(u)}><Trash2 className="h-4 w-4 text-red-600" /></Button>
@@ -169,22 +185,18 @@ export default function UsersPage() {
             {/* Só o administrador cria outro administrador; a API também recusa. */}
             {isAdmin && <option value="ADMIN">Administrador — acesso total, inclusive a esta tela</option>}
             <option value="RH">RH — cadastros, acessos e auditoria, no grupo inteiro</option>
-            <option value="GERENTE">Gerente — operação apenas da filial dele</option>
+            <option value="GERENTE">Gerente — operação apenas das filiais dele</option>
             <option value="DIRETORIA">Diretoria — só leitura, vê o grupo inteiro</option>
             <option value="CONSULTA">Consulta — só leitura</option>
           </Select>
-          <Select
-            label="Filial"
-            hint="Em branco = todas as filiais. Obrigatória no perfil Gerente, que opera só a unidade dele."
-            {...createForm.register("branchId")}
-          >
-            <option value="">Todas as filiais</option>
-            {branches?.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.nome}
-              </option>
-            ))}
-          </Select>
+          <div>
+            <p className="mb-1 text-sm font-medium text-slate-700">Filiais pelas quais responde</p>
+            <p className="mb-2 text-xs text-slate-500">
+              Nenhuma marcada = acesso a todas. Marque quantas precisar — um gerente pode cuidar de mais de
+              uma loja. O perfil Gerente exige pelo menos uma.
+            </p>
+            <BranchChecklist branches={branches} value={filiaisDoNovo} onChange={setFiliaisDoNovo} />
+          </div>
         </form>
       </Modal>
 
@@ -204,22 +216,18 @@ export default function UsersPage() {
             {/* Só o administrador promove alguém a administrador; a API também recusa. */}
             {isAdmin && <option value="ADMIN">Administrador — acesso total, inclusive a esta tela</option>}
             <option value="RH">RH — cadastros, acessos e auditoria, no grupo inteiro</option>
-            <option value="GERENTE">Gerente — operação apenas da filial dele</option>
+            <option value="GERENTE">Gerente — operação apenas das filiais dele</option>
             <option value="DIRETORIA">Diretoria — só leitura, vê o grupo inteiro</option>
             <option value="CONSULTA">Consulta — só leitura</option>
           </Select>
-          <Select
-            label="Filial"
-            hint="Em branco = todas as filiais. Obrigatória no perfil Gerente, que opera só a unidade dele."
-            {...editForm.register("branchId")}
-          >
-            <option value="">Todas as filiais</option>
-            {branches?.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.nome}
-              </option>
-            ))}
-          </Select>
+          <div>
+            <p className="mb-1 text-sm font-medium text-slate-700">Filiais pelas quais responde</p>
+            <p className="mb-2 text-xs text-slate-500">
+              Nenhuma marcada = acesso a todas. Marque quantas precisar — um gerente pode cuidar de mais de
+              uma loja. O perfil Gerente exige pelo menos uma.
+            </p>
+            <BranchChecklist branches={branches} value={filiaisDoEditado} onChange={setFiliaisDoEditado} />
+          </div>
         </form>
       </Modal>
 

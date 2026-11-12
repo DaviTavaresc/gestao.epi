@@ -14,9 +14,10 @@ import { Prisma } from "@prisma/client";
 //
 // 1. O usuário (a conta de acesso). Ele é a pessoa, não a filial: pode ter
 //    assinado entregas em outro CNPJ, e apagá-lo levaria junto registros que
-//    não têm nada com esta exclusão. Ele é desvinculado da filial e inativado.
-//    Inativar é parte da regra, não zelo extra: um usuário sem filial vira
-//    perfil corporativo e passaria a enxergar o grupo inteiro.
+//    não têm nada com esta exclusão. Ele perde o vínculo com esta filial e,
+//    se tiver ficado sem nenhuma, é inativado. Inativar é parte da regra, não
+//    zelo extra: um usuário sem vínculo vira perfil corporativo e passaria a
+//    enxergar o grupo inteiro.
 //
 // 2. O colaborador que apenas TEM CONTRATO com esta empresa mas trabalha em
 //    outra filial. Ele continua existindo, só perde o vínculo de contrato.
@@ -106,7 +107,7 @@ export async function levantarImpacto(tx: Tx, branchId: string): Promise<Impacto
           OR: [{ branchId: null }, { branchId: { notIn: arvore } }],
         },
       }),
-      tx.user.count({ where: { branchId } }),
+      tx.user.count({ where: { branches: { some: { branchId } } } }),
       tx.employeeCharge.count({
         where: {
           OR: [
@@ -234,8 +235,27 @@ export async function excluirFilialEmCascata(tx: Tx, branchId: string): Promise<
   await tx.branchStock.deleteMany({ where: { branchId } });
   await tx.alert.deleteMany({ where: { branchId } });
 
-  // 9. Acessos: desvincula e inativa, nunca apaga. Ver o comentário do topo.
-  await tx.user.updateMany({ where: { branchId }, data: { branchId: null, status: "INATIVO" } });
+  // 9. Acessos: desvincula, nunca apaga. Ver o comentário do topo.
+  //
+  // Quem respondia por mais filiais continua ativo com as que sobraram — perder
+  // uma loja não tira o gerente das outras duas. Só é inativado quem ficou sem
+  // nenhuma: sem vínculo, o usuário viraria perfil corporativo e passaria a
+  // enxergar o grupo inteiro, que é o oposto de ter perdido a única filial.
+  const vinculados = (
+    await tx.userBranch.findMany({ where: { branchId }, select: { userId: true } })
+  ).map((v) => v.userId);
+  await tx.userBranch.deleteMany({ where: { branchId } });
+  if (vinculados.length > 0) {
+    const semNenhuma = (
+      await tx.user.findMany({
+        where: { id: { in: vinculados }, branches: { none: {} } },
+        select: { id: true },
+      })
+    ).map((u) => u.id);
+    if (semNenhuma.length > 0) {
+      await tx.user.updateMany({ where: { id: { in: semNenhuma } }, data: { status: "INATIVO" } });
+    }
+  }
 
   await tx.branch.delete({ where: { id: branchId } });
   return arquivos;

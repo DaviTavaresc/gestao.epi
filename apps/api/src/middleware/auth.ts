@@ -7,13 +7,13 @@ export type AuthenticatedUser = {
   id: string;
   organizationId: string;
   role: "ADMIN" | "RH" | "GERENTE" | "DIRETORIA" | "CONSULTA";
-  // Filial do usuário. Nulo = acesso a todas as filiais da organização.
-  branchId: string | null;
-  // Todas as filiais que este usuário alcança. Nulo = todas as da organização.
-  // Quando o usuário está preso a uma empresa, a lista traz a empresa e as
-  // filiais dela: quem responde pelo CNPJ responde pelas lojas abaixo dele.
-  // Quando está preso a uma filial, a lista tem só ela — filial não enxerga
-  // irmã nem a empresa inteira.
+  // Todas as filiais que este usuário alcança. Nulo = todas as da organização
+  // (perfil matriz / corporativo).
+  //
+  // Sai das filiais vinculadas ao usuário mais as filiais abaixo de cada uma:
+  // quem responde por um CNPJ responde pelas lojas dele. Um gerente de três
+  // lojas tem as três aqui; um gerente de uma loja só tem ela, e não enxerga
+  // a irmã nem a empresa inteira.
   branchIds: string[] | null;
 };
 
@@ -35,27 +35,33 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
 
     // Confirma que o usuário e a organização ainda existem e estão ativos —
     // nunca confia apenas no conteúdo do token para decisões de acesso.
-    const user = await prisma.user.findUnique({ where: { id: payload.sub } });
+    const user = await prisma.user.findUnique({
+      where: { id: payload.sub },
+      include: { branches: { select: { branchId: true } } },
+    });
     if (!user || user.status !== "ATIVO" || user.organizationId !== payload.organizationId) {
       throw unauthorized("Sessão inválida.");
     }
 
-    // Uma consulta a mais só para quem tem filial fixa. Quem é corporativo
-    // (branchId nulo) não paga por ela, e é a maioria dos acessos.
+    // Sem nenhuma filial vinculada o usuário é corporativo e alcança tudo, que
+    // é o caso da maioria dos acessos — e para esses não há consulta nenhuma a
+    // fazer além da que já carregou os vínculos.
+    const vinculadas = user.branches.map((b) => b.branchId);
     let branchIds: string[] | null = null;
-    if (user.branchId) {
+    if (vinculadas.length > 0) {
       const filhas = await prisma.branch.findMany({
-        where: { organizationId: user.organizationId, parentId: user.branchId },
+        where: { organizationId: user.organizationId, parentId: { in: vinculadas } },
         select: { id: true },
       });
-      branchIds = [user.branchId, ...filhas.map((f) => f.id)];
+      // Set porque vincular alguém à empresa E a uma loja dela repetiria a loja,
+      // e id repetido vira linha duplicada em toda listagem que usa esta lista.
+      branchIds = [...new Set([...vinculadas, ...filhas.map((f) => f.id)])];
     }
 
     req.user = {
       id: user.id,
       organizationId: user.organizationId,
       role: user.role,
-      branchId: user.branchId,
       branchIds,
     };
     next();

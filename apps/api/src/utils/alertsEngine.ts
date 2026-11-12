@@ -189,9 +189,30 @@ async function notifyUsersForNewAlerts(
 
   const users = await prisma.user.findMany({
     where: { organizationId, status: "ATIVO", role: { in: relevantRoles } },
-    select: { id: true, role: true, branchId: true },
+    select: { id: true, role: true, branches: { select: { branchId: true } } },
   });
   if (users.length === 0) return;
+
+  // Alcance de cada destinatário: as filiais vinculadas a ele mais as filiais
+  // abaixo delas. Sem isso, o gerente vinculado a uma empresa não receberia o
+  // alerta de estoque das lojas dela, que é justamente o que ele precisa ver.
+  // Uma consulta só, reaproveitada por todos os usuários.
+  const todasAsFiliais = await prisma.branch.findMany({
+    where: { organizationId },
+    select: { id: true, parentId: true },
+  });
+  const alcancePorUsuario = new Map<string, Set<string> | null>(
+    users.map((u) => {
+      const vinculadas = u.branches.map((b) => b.branchId);
+      // Sem vínculo = corporativo: recebe alerta de qualquer filial.
+      if (vinculadas.length === 0) return [u.id, null] as const;
+      const alcance = new Set(vinculadas);
+      for (const filial of todasAsFiliais) {
+        if (filial.parentId && alcance.has(filial.parentId)) alcance.add(filial.id);
+      }
+      return [u.id, alcance] as const;
+    })
+  );
 
   const notifications: { organizationId: string; userId: string; title: string; message: string; link: string }[] = [];
   for (const alert of alerts) {
@@ -200,9 +221,10 @@ async function notifyUsersForNewAlerts(
 
     const recipients = users.filter((u) => {
       if (!roles.includes(u.role as (typeof roles)[number])) return false;
-      // Usuário restrito a uma filial só é notificado sobre alertas da própria filial
-      // (ou sobre alertas corporativos, que não têm filial).
-      if (u.branchId && alert.branchId && u.branchId !== alert.branchId) return false;
+      // Usuário restrito a filiais só é notificado sobre alertas das filiais que
+      // ele alcança (ou sobre alertas corporativos, que não têm filial).
+      const alcance = alcancePorUsuario.get(u.id);
+      if (alcance && alert.branchId && !alcance.has(alert.branchId)) return false;
       return true;
     });
 

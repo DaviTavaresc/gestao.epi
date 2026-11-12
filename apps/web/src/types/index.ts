@@ -318,8 +318,9 @@ export type OrgUser = {
   status: RecordStatus;
   lastLoginAt?: string | null;
   createdAt: string;
-  branchId?: string | null;
-  branch?: { id: string; nome: string } | null;
+  // Filiais pelas quais o usuario responde. Vazio = todas (perfil corporativo).
+  // Uma empresa marcada aqui vale pelas filiais dela.
+  branches?: { id: string; nome: string; parentId?: string | null }[];
 };
 
 export type Organization = {
