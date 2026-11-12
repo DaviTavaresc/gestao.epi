@@ -5,13 +5,19 @@ import { requireAuth } from "../middleware/auth";
 import { requireRole } from "../middleware/rbac";
 import { badRequest, conflict, notFound } from "../utils/httpError";
 import { writeAuditLog } from "../utils/audit";
-import { canAccessAllBranches } from "../utils/branchScope";
+import { allowedBranchIds, canAccessAllBranches } from "../utils/branchScope";
 
 export const branchesRouter = Router();
 branchesRouter.use(requireAuth);
 
+// Um <select> vazio chega como "", não como ausente, e o zod trataria "" como
+// um id de empresa. Vazio aqui quer dizer "este registro é a empresa".
+const vazioComoNulo = (valor: unknown) => (valor === "" || valor === undefined ? null : valor);
+
 const upsertSchema = z.object({
   nome: z.string().min(2),
+  // Empresa a que esta filial pertence. Nulo = o próprio registro é a empresa.
+  parentId: z.preprocess(vazioComoNulo, z.string().min(1).nullable()).default(null),
   codigo: z.string().optional().nullable(),
   cnpj: z.string().optional().nullable(),
   uf: z.string().max(2).optional().nullable(),
@@ -19,6 +25,40 @@ const upsertSchema = z.object({
   endereco: z.string().optional().nullable(),
   responsavel: z.string().optional().nullable(),
 });
+
+// A árvore tem dois andares e só dois: empresa em cima, filial embaixo.
+// Permitir filial de filial criaria uma hierarquia sem fim que nenhuma tela
+// sabe desenhar e que faria o escopo de acesso ter de subir recursivamente.
+// `idDoRegistro` é informado na edição, para barrar os dois casos em que um
+// registro deixaria de ser um andar válido.
+async function validarEmpresaPai(
+  organizationId: string,
+  parentId: string | null,
+  idDoRegistro?: string
+): Promise<void> {
+  if (idDoRegistro) {
+    const filhas = await prisma.branch.count({ where: { parentId: idDoRegistro } });
+    if (parentId && filhas > 0) {
+      throw badRequest(
+        `Este registro é uma empresa e já tem ${filhas} filial(is) vinculada(s): ele não pode virar filial de outra. ` +
+          "Mova as filiais antes, ou deixe o campo Empresa em branco."
+      );
+    }
+    if (parentId === idDoRegistro) {
+      throw badRequest("Uma filial não pode ser vinculada a ela mesma.");
+    }
+  }
+
+  if (!parentId) return;
+
+  const empresa = await prisma.branch.findFirst({ where: { id: parentId, organizationId } });
+  if (!empresa) throw badRequest("Empresa inválida.");
+  if (empresa.parentId) {
+    throw badRequest(
+      `"${empresa.nome}" é uma filial, não uma empresa. Escolha a empresa (o CNPJ) à qual esta filial pertence.`
+    );
+  }
+}
 
 // Listagem: usuários restritos a uma filial só enxergam a própria.
 branchesRouter.get("/", async (req, res, next) => {
@@ -30,11 +70,14 @@ branchesRouter.get("/", async (req, res, next) => {
       where: {
         organizationId: user.organizationId,
         ...(status ? { status: status as "ATIVO" | "INATIVO" } : {}),
-        ...(canAccessAllBranches(user) ? {} : { id: user.branchId! }),
+        ...(canAccessAllBranches(user) ? {} : { id: { in: allowedBranchIds(user) } }),
       },
       orderBy: { nome: "asc" },
       // Conta apenas colaboradores ativos — desligados não representam a operação da filial.
-      include: { _count: { select: { employees: { where: { status: "ATIVO" } }, stocks: true } } },
+      include: {
+        parent: { select: { id: true, nome: true, cnpj: true } },
+        _count: { select: { employees: { where: { status: "ATIVO" } }, stocks: true, filiais: true } },
+      },
     });
 
     res.json(branches);
@@ -50,9 +93,13 @@ branchesRouter.get("/:id", async (req, res, next) => {
       where: {
         id: req.params.id,
         organizationId: user.organizationId,
-        ...(canAccessAllBranches(user) ? {} : { id: user.branchId! }),
+        ...(canAccessAllBranches(user) ? {} : { id: { in: allowedBranchIds(user) } }),
       },
-      include: { _count: { select: { employees: true, deliveries: true } } },
+      include: {
+        parent: { select: { id: true, nome: true, cnpj: true } },
+        filiais: { select: { id: true, nome: true, status: true }, orderBy: { nome: "asc" } },
+        _count: { select: { employees: true, deliveries: true } },
+      },
     });
     if (!branch) throw notFound("Filial não encontrada.");
     res.json(branch);
@@ -67,10 +114,21 @@ branchesRouter.post("/", requireRole("ADMIN", "RH"), async (req, res, next) => {
     const data = upsertSchema.parse(req.body);
 
     const existing = await prisma.branch.findFirst({ where: { organizationId, nome: data.nome } });
-    if (existing) throw conflict("Já existe uma filial com este nome.");
+    // O nome é único na organização inteira, não dentro de cada empresa, porque
+    // é por ele que as telas e os relatórios identificam de onde saiu o EPI.
+    // Duas lojas "Centro" em CNPJs diferentes viram o mesmo rótulo no termo de
+    // entrega, e aí ninguém sabe qual almoxarifado foi.
+    if (existing) {
+      throw conflict(
+        'Já existe uma empresa ou filial com este nome. Acrescente a cidade ou a empresa para diferenciar — ex.: "Centro (Porto Velho)".'
+      );
+    }
+
+    await validarEmpresaPai(organizationId, data.parentId);
 
     const branch = await prisma.branch.create({
       data: { ...data, uf: data.uf?.toUpperCase() ?? null, organizationId },
+      include: { parent: { select: { id: true, nome: true } } },
     });
     await writeAuditLog(prisma, { organizationId, userId, action: "CRIACAO", entityType: "Branch", entityId: branch.id, newData: data });
 
@@ -91,11 +149,18 @@ branchesRouter.put("/:id", requireRole("ADMIN", "RH"), async (req, res, next) =>
     const duplicate = await prisma.branch.findFirst({
       where: { organizationId, nome: data.nome, NOT: { id: existing.id } },
     });
-    if (duplicate) throw conflict("Já existe uma filial com este nome.");
+    if (duplicate) {
+      throw conflict(
+        'Já existe uma empresa ou filial com este nome. Acrescente a cidade ou a empresa para diferenciar — ex.: "Centro (Porto Velho)".'
+      );
+    }
+
+    await validarEmpresaPai(organizationId, data.parentId, existing.id);
 
     const branch = await prisma.branch.update({
       where: { id: existing.id },
       data: { ...data, uf: data.uf?.toUpperCase() ?? null },
+      include: { parent: { select: { id: true, nome: true } } },
     });
     await writeAuditLog(prisma, {
       organizationId,
@@ -120,6 +185,18 @@ branchesRouter.patch("/:id/status", requireRole("ADMIN", "RH"), async (req, res,
 
     const existing = await prisma.branch.findFirst({ where: { id: req.params.id, organizationId } });
     if (!existing) throw notFound("Filial não encontrada.");
+
+    // Empresa inativa com loja ativa embaixo é um estado que não existe na
+    // prática: o CNPJ parou, mas as telas continuariam oferecendo o estoque
+    // daquelas lojas. Quem encerra a empresa encerra as filiais primeiro.
+    if (status === "INATIVO") {
+      const filiaisAtivas = await prisma.branch.count({ where: { parentId: existing.id, status: "ATIVO" } });
+      if (filiaisAtivas > 0) {
+        throw badRequest(
+          `Esta empresa tem ${filiaisAtivas} filial(is) ativa(s). Inative as filiais antes de inativar a empresa.`
+        );
+      }
+    }
 
     const branch = await prisma.branch.update({ where: { id: existing.id }, data: { status } });
     await writeAuditLog(prisma, {
@@ -152,11 +229,22 @@ branchesRouter.delete("/:id", requireRole("ADMIN", "RH"), async (req, res, next)
             stockMovements: true,
             purchases: true,
             charges: true,
+            filiais: true,
           },
         },
       },
     });
     if (!existing) throw notFound("Filial não encontrada.");
+
+    // Apagar a empresa deixaria as filiais dela penduradas num CNPJ que não
+    // existe mais. O banco já recusaria pela chave estrangeira; aqui a recusa
+    // vem com o motivo e o caminho.
+    if (existing._count.filiais > 0) {
+      throw badRequest(
+        `Esta empresa tem ${existing._count.filiais} filial(is) vinculada(s). ` +
+          "Exclua ou mova as filiais antes de excluir a empresa."
+      );
+    }
 
     // Oito tabelas apontam para a filial, não três. Faltando conferir o usuário
     // com acesso restrito a ela, o colaborador cujo contrato é dela e as compras

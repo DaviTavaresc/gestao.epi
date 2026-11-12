@@ -18,7 +18,7 @@ import { usePermissions } from "../../hooks/usePermissions";
 import { toast } from "../../stores/toastStore";
 import { ImportExcelModal } from "../../components/ImportExcelModal";
 import { BranchFilter } from "../../components/BranchFilter";
-import { useBranches } from "../../hooks/useBranches";
+import { agruparPorEmpresa, useBranches } from "../../hooks/useBranches";
 
 type FormData = {
   nomeCompleto: string;
@@ -46,6 +46,9 @@ export default function EmployeesListPage() {
   const [editing, setEditing] = useState<Employee | null>(null);
   const queryClient = useQueryClient();
   const { data: branches } = useBranches();
+  const gruposDeFiliais = agruparPorEmpresa(branches);
+  // Quem assina o contrato e a empresa, nao a loja: so o nivel de cima entra aqui.
+  const empresas = gruposDeFiliais.map((g) => g.empresa);
 
   const { data, isLoading } = useQuery<Page<Employee>>({
     queryKey: ["employees", page, search, status, branchId],
@@ -219,21 +222,32 @@ export default function EmployeesListPage() {
               {...register("branchId", { required: "Obrigatório." })}
             >
               <option value="">Selecione...</option>
-              {branches?.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.nome}
-                </option>
-              ))}
+              {gruposDeFiliais.map(({ empresa, filiais }) =>
+                filiais.length === 0 ? (
+                  <option key={empresa.id} value={empresa.id}>
+                    {empresa.nome}
+                  </option>
+                ) : (
+                  <optgroup key={empresa.id} label={empresa.nome}>
+                    <option value={empresa.id}>{empresa.nome} (sem filial definida)</option>
+                    {filiais.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.nome}
+                      </option>
+                    ))}
+                  </optgroup>
+                )
+              )}
             </Select>
           </div>
           <div className="sm:col-span-2">
             <Select
-              label="Filial do contrato (CNPJ do empregador)"
-              hint="Use quando o contrato for de outra filial — ex.: trabalha em Manaus, contratado pela filial de Rondônia. Em branco, vale a filial onde trabalha."
+              label="Empresa do contrato (CNPJ do empregador)"
+              hint="Quem assina a carteira. Use quando for outra empresa do grupo — ex.: trabalha numa loja do Amazonas, contratado pela empresa de Rondônia. Em branco, vale a empresa da filial onde trabalha."
               {...register("contractBranchId")}
             >
-              <option value="">Mesma filial onde trabalha</option>
-              {branches?.map((b) => (
+              <option value="">Mesma empresa da filial onde trabalha</option>
+              {empresas.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.nome}
                   {b.cnpj ? ` — CNPJ ${b.cnpj}` : " — (sem CNPJ cadastrado)"}

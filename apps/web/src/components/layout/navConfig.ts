@@ -41,7 +41,7 @@ export const navGroups: NavGroup[] = [
     title: "Gestão",
     items: [
       { label: "Colaboradores", to: "/colaboradores", icon: Users },
-      { label: "Filiais", to: "/filiais", icon: Landmark },
+      { label: "Empresas e filiais", to: "/filiais", icon: Landmark },
       { label: "Cargos", to: "/cargos", icon: Briefcase },
       { label: "Setores", to: "/setores", icon: Building2 },
     ],

@@ -162,13 +162,20 @@ employeesRouter.get("/:id", async (req, res, next) => {
   }
 });
 
-// A filial do contrato e apenas dado cadastral: nao define acesso nem estoque,
-// por isso qualquer filial da organizacao e aceita, inclusive de outro estado.
+// Quem contrata e a EMPRESA, nao a loja: e o CNPJ dela que vai no contrato de
+// trabalho, no termo de entrega e na sequencia de matricula. Se vier uma filial
+// aqui, sobe para a empresa dona dela em vez de recusar -- o usuario escolheu o
+// lugar certo no mundo real, so que num nivel abaixo do que o campo representa.
+// Sem subir, a matricula passaria a ser unica por loja e a mesma pessoa poderia
+// ser cadastrada duas vezes no mesmo empregador.
+//
+// A empresa do contrato nao define acesso nem estoque, so dado cadastral, por
+// isso qualquer empresa da organizacao e aceita, inclusive de outro estado.
 async function resolverFilialDoContrato(organizationId: string, contractBranchId: string | null | undefined) {
   if (!contractBranchId) return null;
   const filial = await prisma.branch.findFirst({ where: { id: contractBranchId, organizationId } });
-  if (!filial) throw badRequest("Filial do contrato inválida.");
-  return filial.id;
+  if (!filial) throw badRequest("Empresa do contrato inválida.");
+  return filial.parentId ?? filial.id;
 }
 
 employeesRouter.post("/", async (req, res, next) => {

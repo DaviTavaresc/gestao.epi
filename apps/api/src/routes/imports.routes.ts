@@ -29,14 +29,29 @@ async function buscarFilialDoContrato(organizationId: string, valor: string) {
   const texto = valor.trim();
   if (!texto) return null;
 
-  const porNome = await prisma.branch.findFirst({ where: { organizationId, nome: texto } });
-  if (porNome) return porNome;
+  // Sobe para a empresa quando a planilha trouxe o nome de uma loja: quem
+  // contrata e o CNPJ, e e por ele que a matricula e unica.
+  const subirParaEmpresa = async (achado: { id: string; parentId: string | null } | null) => {
+    if (!achado) return null;
+    if (!achado.parentId) return { id: achado.id };
+    const empresa = await prisma.branch.findUnique({ where: { id: achado.parentId }, select: { id: true } });
+    return empresa ?? { id: achado.id };
+  };
+
+  const porNome = await prisma.branch.findFirst({
+    where: { organizationId, nome: texto },
+    select: { id: true, parentId: true },
+  });
+  if (porNome) return subirParaEmpresa(porNome);
 
   const digitos = texto.replace(/\D/g, "");
   if (digitos.length !== 14) return null;
 
-  const todas = await prisma.branch.findMany({ where: { organizationId }, select: { id: true, cnpj: true } });
-  return todas.find((b) => (b.cnpj ?? "").replace(/\D/g, "") === digitos) ?? null;
+  const todas = await prisma.branch.findMany({
+    where: { organizationId },
+    select: { id: true, cnpj: true, parentId: true },
+  });
+  return subirParaEmpresa(todas.find((b) => (b.cnpj ?? "").replace(/\D/g, "") === digitos) ?? null);
 }
 
 async function validateDepartments(rows: Record<string, string>[], organizationId: string): Promise<RowResult[]> {

@@ -5,7 +5,7 @@ import { sendExcel } from "../utils/excel";
 import { exportListPdf } from "../utils/pdf";
 import { computeCaStatus, computeLifecycleStatus } from "../utils/ppeStatus";
 import { badRequest } from "../utils/httpError";
-import { resolveBranchFilter } from "../utils/branchScope";
+import { resolveBranchFilter, BranchScope } from "../utils/branchScope";
 
 export const reportsRouter = Router();
 // Relatórios são somente leitura — todo perfil autenticado pode visualizar, incluindo CONSULTA.
@@ -28,7 +28,9 @@ async function buildReport(
   type: string,
   organizationId: string,
   query: Record<string, unknown>,
-  branchId?: string
+  // Pode ser uma filial so ou a lista de filiais que o usuario alcanca
+  // (empresa + lojas), por isso o tipo vem do proprio helper de escopo.
+  branchId?: BranchScope["branchId"]
 ): Promise<{ title: string; columns: { header: string; key: string; width: number }[]; rows: Row[] }> {
   const { from, to } = parseDateRange({ query });
   const employeeId = query.employeeId as string | undefined;

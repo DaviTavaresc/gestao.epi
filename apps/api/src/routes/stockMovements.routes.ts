@@ -29,7 +29,11 @@ stockRouter.get("/current", async (req, res, next) => {
           ...(search ? { nome: { contains: search, mode: "insensitive" as const } } : {}),
         },
       },
-      include: { ppeItem: { include: { category: true } }, branch: true },
+      // A empresa dona da filial vem junto para a tela mostrar de qual CNPJ é o saldo.
+      include: {
+        ppeItem: { include: { category: true } },
+        branch: { include: { parent: { select: { id: true, nome: true, cnpj: true } } } },
+      },
       orderBy: [{ branch: { nome: "asc" } }, { ppeItem: { nome: "asc" } }],
     });
 

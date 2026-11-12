@@ -216,6 +216,17 @@ model Branch {
   id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
+  // Dois niveis no mesmo cadastro. parentId nulo = este registro e a EMPRESA:
+  // a razao social com CNPJ proprio, que assina o contrato de trabalho e sai no
+  // termo de entrega. parentId preenchido = este registro e uma FILIAL fisica
+  // (loja, unidade) daquela empresa, e e nela que fica o almoxarifado.
+  // Sao duas entidades com os mesmos campos (nome, CNPJ, endereco, responsavel)
+  // e os mesmos vinculos (estoque, colaborador, compra), por isso uma tabela so
+  // com auto-relacionamento em vez de duas tabelas gemeas. A profundidade e
+  // travada em dois niveis pela rota: filial de filial nao existe.
+  parentId       String?
+  parent         Branch?      @relation("BranchEmpresa", fields: [parentId], references: [id])
+  filiais        Branch[]     @relation("BranchEmpresa")
   nome           String
   codigo         String?
   cnpj           String?
@@ -240,6 +251,7 @@ model Branch {
 
   @@unique([organizationId, nome])
   @@index([organizationId, status])
+  @@index([organizationId, parentId])
   @@map("branches")
 }
 

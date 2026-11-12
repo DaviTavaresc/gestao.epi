@@ -9,7 +9,7 @@ import { writeAuditLog } from "../utils/audit";
 import { computeCaStatus } from "../utils/ppeStatus";
 import { booleanDoFormulario } from "../utils/zodHelpers";
 import { applyStockMovement } from "../utils/stock";
-import { assertBranchAllowed, resolveBranchFilter } from "../utils/branchScope";
+import { assertBranchAllowed, resolveBranchFilter, BranchScope } from "../utils/branchScope";
 
 export const ppeItemsRouter = Router();
 ppeItemsRouter.use(requireAuth, requireWriteRole("RH"));
@@ -73,7 +73,7 @@ const createSchema = comRegrasDeCa(
 );
 
 // Soma o estoque de todas as filiais visíveis ao usuário, para exibir no catálogo.
-async function consolidatedStock(organizationId: string, branchId?: string) {
+async function consolidatedStock(organizationId: string, branchId?: BranchScope["branchId"]) {
   const rows = await prisma.branchStock.groupBy({
     by: ["ppeItemId"],
     where: { organizationId, ...(branchId ? { branchId } : {}) },

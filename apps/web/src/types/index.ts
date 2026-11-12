@@ -11,9 +11,15 @@ export type PurchaseStatus = "RASCUNHO" | "RECEBIDA" | "CANCELADA";
 
 export type Page<T> = { items: T[]; total: number; page: number; pageSize: number; totalPages: number };
 
+// O cadastro tem dois niveis no mesmo tipo:
+// parentId nulo  -> EMPRESA (razao social com CNPJ proprio)
+// parentId cheio -> FILIAL fisica daquela empresa, onde fica o almoxarifado
 export type Branch = {
   id: string;
   nome: string;
+  parentId?: string | null;
+  parent?: { id: string; nome: string; cnpj?: string | null } | null;
+  filiais?: { id: string; nome: string; status: RecordStatus }[];
   codigo?: string | null;
   cnpj?: string | null;
   uf?: string | null;
@@ -21,7 +27,7 @@ export type Branch = {
   endereco?: string | null;
   responsavel?: string | null;
   status: RecordStatus;
-  _count?: { employees: number; stocks: number; deliveries?: number };
+  _count?: { employees: number; stocks: number; deliveries?: number; filiais?: number };
 };
 
 export type BranchStock = {

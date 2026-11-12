@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { SlidersHorizontal, FileDown, FileSpreadsheet, PackagePlus, Trash2 } from "lucide-react";
@@ -16,11 +16,13 @@ import { InlineBanner } from "../../components/ui/Feedback";
 import { usePermissions } from "../../hooks/usePermissions";
 import { toast } from "../../stores/toastStore";
 import { BranchFilter } from "../../components/BranchFilter";
-import { useBranches } from "../../hooks/useBranches";
+import { agruparPorEmpresa, filiaisDaEmpresa, useBranches } from "../../hooks/useBranches";
 
 type FormData = { tipo: string; quantidade: number; motivo: string };
 type LimitsFormData = { estoqueMinimo: number; estoqueMaximo: number; custoUnitario: number };
 type NovoItemFormData = {
+  // A empresa so orienta a escolha: quem grava o estoque e a filial.
+  empresaId: string;
   branchId: string;
   ppeItemId: string;
   quantidade: number;
@@ -39,6 +41,7 @@ export default function StockCurrentPage() {
   const [removendo, setRemovendo] = useState<BranchStock | null>(null);
   const queryClient = useQueryClient();
   const { data: branches } = useBranches();
+  const empresas = agruparPorEmpresa(branches).map((g) => g.empresa);
 
   // Tira o EPI do estoque desta filial. A API só aceita com saldo zerado: apagar
   // uma linha com saldo faria a quantidade sumir sem explicação no livro de
@@ -70,6 +73,30 @@ export default function StockCurrentPage() {
   const { register, handleSubmit, reset, formState } = useForm<FormData>();
   const limitsForm = useForm<LimitsFormData>();
   const novoItemForm = useForm<NovoItemFormData>();
+
+  // Escolhida a empresa, a lista de filiais e so a dela. Enquanto a empresa nao
+  // tiver filial cadastrada, a unica opcao e o proprio CNPJ — que e onde o
+  // estoque esta hoje, antes de as lojas serem cadastradas.
+  const empresaSelecionada = novoItemForm.watch("empresaId");
+  const filiaisDisponiveis = filiaisDaEmpresa(branches, empresaSelecionada);
+  const empresaSemFilial =
+    !!empresaSelecionada && filiaisDisponiveis.length === 1 && filiaisDisponiveis[0].id === empresaSelecionada;
+
+  // Trocar de empresa nao pode deixar para tras a filial da empresa anterior:
+  // o formulario enviaria estoque para o CNPJ errado sem o usuario perceber.
+  useEffect(() => {
+    if (!empresaSelecionada) {
+      novoItemForm.setValue("branchId", "");
+      return;
+    }
+    if (empresaSemFilial) {
+      novoItemForm.setValue("branchId", empresaSelecionada);
+      return;
+    }
+    const atual = novoItemForm.getValues("branchId");
+    if (!filiaisDisponiveis.some((f) => f.id === atual)) novoItemForm.setValue("branchId", "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [empresaSelecionada]);
 
   const adjustMutation = useMutation({
     mutationFn: async (values: FormData) =>
@@ -153,8 +180,13 @@ export default function StockCurrentPage() {
           {canEdit && (
             <Button
               onClick={() => {
+                // Vindo do filtro do topo, a tela ja sabe a filial escolhida: a
+                // empresa dela vem junto para o modal abrir preenchido.
+                const filialInicial = branchId || (branches?.length === 1 ? branches[0].id : "");
+                const registro = branches?.find((b) => b.id === filialInicial);
                 novoItemForm.reset({
-                  branchId: branchId || (branches?.length === 1 ? branches[0].id : ""),
+                  empresaId: registro ? registro.parentId ?? registro.id : "",
+                  branchId: filialInicial,
                   ppeItemId: "",
                   quantidade: 0,
                   estoqueMinimo: 0,
@@ -181,7 +213,18 @@ export default function StockCurrentPage() {
         />
         <DataTable
           columns={[
-            { header: "Filial", cell: (s) => <span className="font-medium text-navy-700">{s.branch.nome}</span> },
+            {
+              header: "Empresa",
+              cell: (s) => <span className="text-slate-600">{s.branch.parent?.nome ?? s.branch.nome}</span>,
+            },
+            {
+              header: "Filial",
+              cell: (s) => (
+                <span className="font-medium text-navy-700">
+                  {s.branch.parentId ? s.branch.nome : <span className="text-slate-400">— sem filial —</span>}
+                </span>
+              ),
+            },
             { header: "EPI", cell: (s) => <span className="font-medium text-slate-700">{s.ppeItem.nome}</span> },
             { header: "Categoria", cell: (s) => s.ppeItem.category?.nome ?? "-" },
             { header: "Atual", cell: (s) => s.estoqueAtual },
@@ -265,15 +308,37 @@ export default function StockCurrentPage() {
         <form className="space-y-4" onSubmit={novoItemForm.handleSubmit((v) => novoItemMutation.mutate(v))}>
           {novoItemMutation.isError && <InlineBanner tone="error">{extractErrorMessage(novoItemMutation.error)}</InlineBanner>}
           <Select
+            label="Empresa"
+            required
+            hint="A razão social (CNPJ) dona do estoque."
+            error={novoItemForm.formState.errors.empresaId?.message}
+            {...novoItemForm.register("empresaId", { required: "Obrigatório." })}
+          >
+            <option value="">Selecione...</option>
+            {empresas.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.nome}
+              </option>
+            ))}
+          </Select>
+          <Select
             label="Filial"
             required
+            disabled={!empresaSelecionada}
+            hint={
+              !empresaSelecionada
+                ? "Escolha a empresa primeiro."
+                : empresaSemFilial
+                ? "Esta empresa ainda não tem filial cadastrada, então o estoque fica no próprio CNPJ. Para separar por loja, cadastre as filiais em Empresas e filiais."
+                : "A unidade física onde o EPI vai ficar guardado."
+            }
             error={novoItemForm.formState.errors.branchId?.message}
             {...novoItemForm.register("branchId", { required: "Obrigatório." })}
           >
             <option value="">Selecione...</option>
-            {branches?.map((b) => (
+            {filiaisDisponiveis.map((b) => (
               <option key={b.id} value={b.id}>
-                {b.nome}
+                {b.id === empresaSelecionada ? `${b.nome} (estoque da empresa)` : b.nome}
               </option>
             ))}
           </Select>
