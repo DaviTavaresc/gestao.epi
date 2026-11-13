@@ -19,7 +19,7 @@ type FormData = { nome: string; descricao?: string };
 
 export default function PpeCategoriesPage() {
   const { canWrite } = usePermissions();
-  const canEdit = canWrite(["RH"]);
+  const canEdit = canWrite(["RH", "GERENTE"]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<PpeCategory | null>(null);
   const [toggling, setToggling] = useState<PpeCategory | null>(null);

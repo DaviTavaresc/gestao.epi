@@ -35,7 +35,9 @@ export function roleLabel(role: Role): string {
     case "RH":
       return "RH";
     case "GERENTE":
-      return "Gerente";
+      // Nome novo do perfil, pedido pelo RH. O valor gravado continua GERENTE:
+      // o que muda e o rotulo que todo mundo le na tela.
+      return "Adm. Operacional";
     case "DIRETORIA":
       return "Diretoria";
     case "CONSULTA":

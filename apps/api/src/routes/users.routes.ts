@@ -53,14 +53,19 @@ usersRouter.get("/", async (req, res, next) => {
   }
 });
 
-// O GERENTE existe para operar unidades determinadas. Sem nenhuma filial
-// vinculada ele cairia na regra do "usuário corporativo" e enxergaria as oito
-// empresas do grupo — o oposto do perfil. Melhor recusar o cadastro do que
-// criar um acesso amplo demais por esquecimento de preencher um campo.
+// O GERENTE — chamado Adm. Operacional na tela — existe para operar unidades
+// determinadas. O valor gravado continua GERENTE: trocar o enum exigiria uma
+// migração num sistema em uso, e o pedido foi de nome, não de estrutura.
+//
+// Sem nenhuma filial vinculada ele cairia na regra do "usuário corporativo" e
+// enxergaria as oito empresas do grupo — o oposto do perfil. Isso pesa mais
+// agora que ele também cadastra colaborador: um adm-operacional sem filial
+// cadastraria gente em qualquer empresa. Melhor recusar o cadastro do que criar
+// um acesso amplo demais por esquecimento de preencher um campo.
 function exigirFilialDoGerente(role: string, branchIds: string[]) {
   if (role === "GERENTE" && branchIds.length === 0) {
     throw badRequest(
-      "O perfil Gerente precisa de pelo menos uma filial vinculada: ele enxerga e opera apenas as unidades dele."
+      "O perfil Adm. Operacional precisa de pelo menos uma filial vinculada: ele enxerga e opera apenas as unidades dele."
     );
   }
 }

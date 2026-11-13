@@ -7,7 +7,8 @@ import { badRequest, notFound } from "../utils/httpError";
 import { writeAuditLog } from "../utils/audit";
 
 export const ppeKitsRouter = Router();
-ppeKitsRouter.use(requireAuth, requireWriteRole("RH"));
+// Kit é do grupo inteiro, como o catálogo de EPI. Ver ppeItems.routes.ts.
+ppeKitsRouter.use(requireAuth, requireWriteRole("RH", "GERENTE"));
 
 const kitItemSchema = z.object({ ppeItemId: z.string().min(1), quantidade: z.coerce.number().int().positive() });
 const upsertSchema = z.object({

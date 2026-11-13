@@ -12,7 +12,10 @@ import { applyStockMovement } from "../utils/stock";
 import { assertBranchAllowed, resolveBranchFilter, BranchScope } from "../utils/branchScope";
 
 export const ppeItemsRouter = Router();
-ppeItemsRouter.use(requireAuth, requireWriteRole("RH"));
+// O catálogo de EPI vale para o grupo inteiro: não tem coluna de filial. O
+// adm-operacional foi liberado aqui por decisão do RH, ciente de que um EPI
+// que ele criar ou inativar aparece para todas as empresas do grupo.
+ppeItemsRouter.use(requireAuth, requireWriteRole("RH", "GERENTE"));
 
 const camposDoItem = {
   nome: z.string().min(2),

@@ -18,7 +18,7 @@ type FormData = { nome: string; descricao?: string; items: { ppeItemId: string; 
 
 export default function PpeKitsPage() {
   const { canWrite } = usePermissions();
-  const canEdit = canWrite(["RH"]);
+  const canEdit = canWrite(["RH", "GERENTE"]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<PpeKit | null>(null);
   const [toggling, setToggling] = useState<PpeKit | null>(null);

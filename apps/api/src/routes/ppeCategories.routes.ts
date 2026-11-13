@@ -7,7 +7,8 @@ import { badRequest, conflict, notFound } from "../utils/httpError";
 import { writeAuditLog } from "../utils/audit";
 
 export const ppeCategoriesRouter = Router();
-ppeCategoriesRouter.use(requireAuth, requireWriteRole("RH"));
+// Categoria é do grupo inteiro, como o catálogo de EPI. Ver ppeItems.routes.ts.
+ppeCategoriesRouter.use(requireAuth, requireWriteRole("RH", "GERENTE"));
 
 const upsertSchema = z.object({
   nome: z.string().min(2),

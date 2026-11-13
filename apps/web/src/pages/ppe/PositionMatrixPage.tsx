@@ -19,7 +19,7 @@ type FormData = { ppeItemId: string; quantidade: number; vidaUtilDiasOverride?: 
 
 export default function PositionMatrixPage() {
   const { canWrite } = usePermissions();
-  const canEdit = canWrite(["RH"]);
+  const canEdit = canWrite(["RH", "GERENTE"]);
   const [selectedPositionId, setSelectedPositionId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   // Preenchido = o modal esta editando um vinculo que ja existe; nulo = esta criando.

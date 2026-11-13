@@ -35,7 +35,7 @@ type FormData = {
 
 export default function EmployeesListPage() {
   const { canWrite } = usePermissions();
-  const canEdit = canWrite(["RH"]);
+  const canEdit = canWrite(["RH", "GERENTE"]);
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");

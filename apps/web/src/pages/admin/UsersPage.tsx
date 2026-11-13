@@ -185,15 +185,15 @@ export default function UsersPage() {
             {/* Só o administrador cria outro administrador; a API também recusa. */}
             {isAdmin && <option value="ADMIN">Administrador — acesso total, inclusive a esta tela</option>}
             <option value="RH">RH — cadastros, acessos e auditoria, no grupo inteiro</option>
-            <option value="GERENTE">Gerente — operação apenas das filiais dele</option>
+            <option value="GERENTE">Adm. Operacional — opera e cadastra nas filiais dele</option>
             <option value="DIRETORIA">Diretoria — só leitura, vê o grupo inteiro</option>
             <option value="CONSULTA">Consulta — só leitura</option>
           </Select>
           <div>
             <p className="mb-1 text-sm font-medium text-slate-700">Filiais pelas quais responde</p>
             <p className="mb-2 text-xs text-slate-500">
-              Nenhuma marcada = acesso a todas. Marque quantas precisar — um gerente pode cuidar de mais de
-              uma loja. O perfil Gerente exige pelo menos uma.
+              Nenhuma marcada = acesso a todas. Marque quantas precisar — um adm-operacional pode cuidar de
+              mais de uma loja. O perfil Adm. Operacional exige pelo menos uma.
             </p>
             <BranchChecklist branches={branches} value={filiaisDoNovo} onChange={setFiliaisDoNovo} />
           </div>
@@ -216,15 +216,15 @@ export default function UsersPage() {
             {/* Só o administrador promove alguém a administrador; a API também recusa. */}
             {isAdmin && <option value="ADMIN">Administrador — acesso total, inclusive a esta tela</option>}
             <option value="RH">RH — cadastros, acessos e auditoria, no grupo inteiro</option>
-            <option value="GERENTE">Gerente — operação apenas das filiais dele</option>
+            <option value="GERENTE">Adm. Operacional — opera e cadastra nas filiais dele</option>
             <option value="DIRETORIA">Diretoria — só leitura, vê o grupo inteiro</option>
             <option value="CONSULTA">Consulta — só leitura</option>
           </Select>
           <div>
             <p className="mb-1 text-sm font-medium text-slate-700">Filiais pelas quais responde</p>
             <p className="mb-2 text-xs text-slate-500">
-              Nenhuma marcada = acesso a todas. Marque quantas precisar — um gerente pode cuidar de mais de
-              uma loja. O perfil Gerente exige pelo menos uma.
+              Nenhuma marcada = acesso a todas. Marque quantas precisar — um adm-operacional pode cuidar de
+              mais de uma loja. O perfil Adm. Operacional exige pelo menos uma.
             </p>
             <BranchChecklist branches={branches} value={filiaisDoEditado} onChange={setFiliaisDoEditado} />
           </div>

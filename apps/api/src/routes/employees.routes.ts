@@ -3,14 +3,17 @@ import { z } from "zod";
 import { prisma } from "../prisma";
 import { requireAuth } from "../middleware/auth";
 import { requireWriteRole } from "../middleware/rbac";
-import { badRequest, conflict, notFound } from "../utils/httpError";
+import { badRequest, conflict, forbidden, notFound } from "../utils/httpError";
 import { parsePagination, toSkipTake, buildPageResult } from "../utils/pagination";
 import { writeAuditLog } from "../utils/audit";
 import { computeLifecycleStatus } from "../utils/ppeStatus";
-import { assertBranchAllowed, resolveBranchFilter } from "../utils/branchScope";
+import { assertBranchAllowed, resolveBranchFilter, canAccessAllBranches, allowedBranchIds } from "../utils/branchScope";
+import { AuthenticatedUser } from "../middleware/auth";
 
 export const employeesRouter = Router();
-employeesRouter.use(requireAuth, requireWriteRole("RH"));
+// O adm-operacional (GERENTE) cadastra o pessoal das filiais dele. Cada escrita
+// aqui confere a filial: o escopo e o que separa "o pessoal dele" do grupo todo.
+employeesRouter.use(requireAuth, requireWriteRole("RH", "GERENTE"));
 
 const upsertSchema = z.object({
   nomeCompleto: z.string().min(2),
@@ -171,11 +174,33 @@ employeesRouter.get("/:id", async (req, res, next) => {
 //
 // A empresa do contrato nao define acesso nem estoque, so dado cadastral, por
 // isso qualquer empresa da organizacao e aceita, inclusive de outro estado.
-async function resolverFilialDoContrato(organizationId: string, contractBranchId: string | null | undefined) {
+async function resolverFilialDoContrato(user: AuthenticatedUser, contractBranchId: string | null | undefined) {
+  const { organizationId } = user;
   if (!contractBranchId) return null;
   const filial = await prisma.branch.findFirst({ where: { id: contractBranchId, organizationId } });
   if (!filial) throw badRequest("Empresa do contrato inválida.");
-  return filial.parentId ?? filial.id;
+  const empresa = filial.parentId ?? filial.id;
+
+  // Quem tem escopo restrito só assina contrato pela empresa das filiais que
+  // alcança. Sem isso, o adm-operacional de uma loja poderia lançar o
+  // colaborador sob o CNPJ de outra empresa do grupo: a matrícula sairia da
+  // sequência daquela empresa, o termo de entrega sairia no nome dela e a
+  // contagem de pessoal dela mudaria sem ninguém de lá saber.
+  //
+  // A empresa não precisa estar vinculada a ele. Quem responde por uma loja
+  // normalmente tem vínculo só com a loja, e o contrato é com o CNPJ acima
+  // dela — por isso a conta sobe de cada filial permitida até a empresa.
+  if (!canAccessAllBranches(user)) {
+    const minhas = await prisma.branch.findMany({
+      where: { id: { in: allowedBranchIds(user) } },
+      select: { id: true, parentId: true },
+    });
+    const empresasPermitidas = new Set(minhas.map((b) => b.parentId ?? b.id));
+    if (!empresasPermitidas.has(empresa)) {
+      throw forbidden("Você só pode vincular o contrato à empresa das suas filiais.");
+    }
+  }
+  return empresa;
 }
 
 employeesRouter.post("/", async (req, res, next) => {
@@ -186,7 +211,7 @@ employeesRouter.post("/", async (req, res, next) => {
 
     const branch = await prisma.branch.findFirst({ where: { id: data.branchId, organizationId } });
     if (!branch) throw badRequest("Filial inválida.");
-    const contractBranchId = await resolverFilialDoContrato(organizationId, data.contractBranchId);
+    const contractBranchId = await resolverFilialDoContrato(req.user!, data.contractBranchId);
 
     // A matricula so colide dentro da mesma empresa do contrato: e ela que emite o numero.
     const [dupCpf, dupMatricula] = await Promise.all([
@@ -220,7 +245,7 @@ employeesRouter.put("/:id", async (req, res, next) => {
 
     const branch = await prisma.branch.findFirst({ where: { id: data.branchId, organizationId } });
     if (!branch) throw badRequest("Filial inválida.");
-    const contractBranchId = await resolverFilialDoContrato(organizationId, data.contractBranchId);
+    const contractBranchId = await resolverFilialDoContrato(req.user!, data.contractBranchId);
 
     const [dupCpf, dupMatricula] = await Promise.all([
       prisma.employee.findFirst({ where: { organizationId, cpf: data.cpf, NOT: { id: existing.id } } }),
@@ -246,7 +271,11 @@ employeesRouter.patch("/:id/status", async (req, res, next) => {
     const { organizationId, id: userId } = req.user!;
     const { status } = z.object({ status: z.enum(["ATIVO", "AFASTADO", "FERIAS", "DESLIGADO"]) }).parse(req.body);
 
-    const existing = await prisma.employee.findFirst({ where: { id: req.params.id, organizationId } });
+    // Desligar e afastar seguem o mesmo escopo do cadastro: fora das filiais do
+    // usuário o colaborador nem é encontrado.
+    const existing = await prisma.employee.findFirst({
+      where: { id: req.params.id, organizationId, ...resolveBranchFilter(req.user!) },
+    });
     if (!existing) throw notFound("Colaborador não encontrado.");
 
     const employee = await prisma.employee.update({
@@ -273,7 +302,7 @@ employeesRouter.delete("/:id", async (req, res, next) => {
   try {
     const { organizationId } = req.user!;
     const existing = await prisma.employee.findFirst({
-      where: { id: req.params.id, organizationId },
+      where: { id: req.params.id, organizationId, ...resolveBranchFilter(req.user!) },
       include: { _count: { select: { deliveries: true } } },
     });
     if (!existing) throw notFound("Colaborador não encontrado.");

@@ -8,7 +8,10 @@ import { writeAuditLog } from "../utils/audit";
 
 // Matriz Cargo x EPI — define quais EPIs são obrigatórios para cada cargo.
 export const positionRequirementsRouter = Router();
-positionRequirementsRouter.use(requireAuth, requireWriteRole("RH"));
+// A matriz é do grupo inteiro: o cargo não tem filial. Mudar o EPI obrigatório
+// de um cargo muda para todas as empresas, e o adm-operacional alcança isso
+// por decisão do RH. Ver ppeItems.routes.ts.
+positionRequirementsRouter.use(requireAuth, requireWriteRole("RH", "GERENTE"));
 
 positionRequirementsRouter.get("/", async (req, res, next) => {
   try {

@@ -36,7 +36,7 @@ export default function EmployeeDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { canWrite } = usePermissions();
-  const canEdit = canWrite(["RH"]);
+  const canEdit = canWrite(["RH", "GERENTE"]);
   const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery<DetailResponse>({
